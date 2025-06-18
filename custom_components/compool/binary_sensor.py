@@ -74,7 +74,7 @@ async def async_setup_entry(
     compool_domain_data = config_entry.runtime_data
     coordinator = compool_domain_data.coordinator
 
-    device_name = f"Pool Controller {coordinator.host}:{coordinator.port}"
+    device_name = "Pool Controller"
 
     entities: list[CompoolBinarySensor] = []
 

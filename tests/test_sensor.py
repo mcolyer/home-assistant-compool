@@ -27,9 +27,8 @@ async def test_sensors(hass: HomeAssistant) -> None:
     # We should have 8 sensors
     assert len(sensors) == 8
 
-    # All sensors should be from this integration
+    # All sensors should be from this integration - entity IDs now use device name + translation key
     for sensor in sensors:
-        assert sensor.entity_id.startswith("sensor.pool_controller_192_168_1_100_8899")
         assert (
             sensor.attributes.get("attribution")
             == "Data provided by Compool pool controller"

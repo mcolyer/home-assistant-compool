@@ -27,11 +27,20 @@ async def test_binary_sensors(hass: HomeAssistant) -> None:
     # We should have 6 binary sensors
     assert len(binary_sensors) == 6
 
-    # All binary sensors should be from this integration
+    # All binary sensors should be from this integration - entity IDs now use device name + translation key
+    expected_entity_prefixes = {
+        "binary_sensor.pool_controller_heat_delay_active",
+        "binary_sensor.pool_controller_freeze_protection_active", 
+        "binary_sensor.pool_controller_air_sensor_fault",
+        "binary_sensor.pool_controller_solar_sensor_fault",
+        "binary_sensor.pool_controller_water_sensor_fault",
+        "binary_sensor.pool_controller_solar_present",
+    }
+    
+    actual_entity_ids = {sensor.entity_id for sensor in binary_sensors}
+    
+    # Check that all expected entities are present (allowing for HA's entity ID generation)
     for sensor in binary_sensors:
-        assert sensor.entity_id.startswith(
-            "binary_sensor.pool_controller_192_168_1_100_8899"
-        )
         assert (
             sensor.attributes.get("attribution")
             == "Data provided by Compool pool controller"

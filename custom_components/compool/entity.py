@@ -26,10 +26,9 @@ class CompoolEntity(CoordinatorEntity[CompoolStatusDataUpdateCoordinator]):
         super().__init__(coordinator)
         self.entity_description = description
 
-        # Create a comprehensive unique ID
-        self._attr_unique_id = (
-            f"{DOMAIN}_{coordinator.host}_{coordinator.port}_{description.key}"
-        )
+        # Create a simple unique ID using the device identifier and description key
+        device_id = f"{coordinator.host}:{coordinator.port}"
+        self._attr_unique_id = f"{DOMAIN}_{device_id}_{description.key}"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{coordinator.host}:{coordinator.port}")},

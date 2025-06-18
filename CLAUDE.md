@@ -85,7 +85,41 @@ The integration includes a comprehensive test suite using pytest with Home Assis
 - **Coordinator Sharing**: Both sensor and binary_sensor platforms use the shared coordinator from `runtime_data` instead of creating new instances
 - **Entity Naming**: Home Assistant generates entity IDs using device_class and translation keys
 - **Manifest Requirements**: HA 2025.6.0+ requires a "version" field in manifest.json  
-- **Python Version**: Uses Python 3.13.3 managed by uv for compatibility with latest HA versions
+- **Python Version**: Uses Python 3.13.2 managed by uv for compatibility with latest HA versions (Home Assistant 2025.6.0 requires >=3.13.2)
 - **Polling Strategy**: Pool controller status updates every 30 seconds using brief TCP connections for real-time monitoring
 - **Local Communication**: Uses pycompool v0.1.2 for RS485 over TCP communication with pool controllers
 - **Connection Pattern**: Connect briefly, get status, disconnect automatically to minimize connection overhead
+
+## CI/CD & Code Quality
+
+### GitHub Actions Workflows
+- **ci.yml**: Runs lint, test, and hassfest validation on code changes only (excludes documentation)
+- **release.yml**: Validates code quality on releases
+- **Path Filters**: Uses `paths:` to trigger CI only on relevant file changes (custom_components/, tests/, scripts/, config files)
+
+### Code Quality Tools
+- **Ruff**: Fast Python linter and formatter with Home Assistant specific rules
+- **Pre-commit**: Automated code quality checks before commits
+- **Hassfest**: Home Assistant integration validation tool
+- **Codecov**: Test coverage reporting and tracking
+
+### Important Requirements & Fixes
+- **Python Version Matching**: CI Python version must match pyproject.toml requirements (use 3.13.2, not 3.13)
+- **Manifest Key Ordering**: manifest.json requires specific key order: `domain`, `name`, then alphabetical
+- **Import Management**: Remove unused imports to pass linting (F401 errors)
+- **Exception Handling**: Use `else` clauses in try/except blocks instead of returns in try (TRY300)
+- **Raise Abstraction**: Extract raise statements to separate methods when flagged by TRY301
+- **Dependency Resolution**: Ensure pyproject.toml `requires-python` matches library requirements
+
+### Linting Best Practices
+- Run `uv run ruff check --fix .` to auto-fix most issues
+- Run `uv run ruff format .` for consistent formatting
+- Import organization: stdlib, third-party, local imports with proper spacing
+- Avoid unused variables and imports
+- Use proper exception handling patterns
+
+### Testing Strategy
+- Mock external dependencies (pycompool.PoolController) in conftest.py
+- Create realistic mock data that matches expected API responses
+- Test both happy path and error conditions
+- Use pytest fixtures for consistent test data

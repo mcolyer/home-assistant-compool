@@ -8,15 +8,10 @@ from typing import Any
 from pycompool import PoolController
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import (
-    _LOGGER,
-    DOMAIN,
-    STATUS_SCAN_INTERVAL,
-)
+from .const import _LOGGER, DOMAIN, STATUS_SCAN_INTERVAL
 
 
 @dataclass
@@ -29,9 +24,7 @@ class CompoolRuntimeData:
 type CompoolConfigEntry = ConfigEntry[CompoolRuntimeData]
 
 
-class CompoolStatusDataUpdateCoordinator(
-    DataUpdateCoordinator[dict[str, Any]]
-):
+class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Data update coordinator for pool controller status."""
 
     config_entry: CompoolConfigEntry
@@ -62,17 +55,25 @@ class CompoolStatusDataUpdateCoordinator(
             controller = PoolController(self._device, 9600)
             status = controller.get_status()
             # Controller automatically disconnects after get_status
-            return status
         except Exception as ex:
             _LOGGER.error(f"Error getting pool controller status: {ex}")
             return None
+        else:
+            return status
+
+    def _raise_if_no_status(self, status: dict[str, Any] | None) -> None:
+        """Raise UpdateFailed if status is None."""
+        if status is None:
+            raise UpdateFailed("Failed to get pool controller status")
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update pool controller status."""
         try:
             status = await self.hass.async_add_executor_job(self._get_pool_status)
-            if status is None:
-                raise UpdateFailed("Failed to get pool controller status")
-            return status
+            self._raise_if_no_status(status)
         except Exception as ex:
-            raise UpdateFailed(f"Error communicating with pool controller: {ex}") from ex
+            raise UpdateFailed(
+                f"Error communicating with pool controller: {ex}"
+            ) from ex
+        else:
+            return status

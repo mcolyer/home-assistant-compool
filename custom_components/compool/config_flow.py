@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import logging
 from typing import Any
 
@@ -14,7 +13,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import CONF_HOST, CONF_PORT, DEFAULT_PORT, DOMAIN
+from .const import DEFAULT_PORT, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,11 +29,11 @@ def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> PoolController
     """Validate in the executor."""
     host = data[CONF_HOST]
     port = data[CONF_PORT]
-    
+
     # Create RS485 over TCP connection string
     device = f"{host}:{port}"
     controller = PoolController(device, 9600)
-    
+
     # Test connection by getting status
     status = controller.get_status()
     if status is None:
@@ -49,7 +48,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     Data has the keys from DATA_SCHEMA with values provided by the user.
     """
     try:
-        controller = await hass.async_add_executor_job(_validate_input, hass, data)
+        await hass.async_add_executor_job(_validate_input, hass, data)
         # Controller will auto-disconnect after get_status
     except Exception as err:
         _LOGGER.exception("Unexpected error during validation")
@@ -74,7 +73,9 @@ class CompoolConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            await self.async_set_unique_id(f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}")
+            await self.async_set_unique_id(
+                f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
+            )
             self._abort_if_unique_id_configured()
 
             try:
@@ -86,7 +87,6 @@ class CompoolConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
-
 
 
 class CannotConnect(HomeAssistantError):

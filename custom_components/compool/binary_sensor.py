@@ -11,16 +11,16 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .coordinator import CompoolConfigEntry
-from .entity import CompoolEntity
 from .const import (
-    KEY_HEAT_DELAY_ACTIVE,
-    KEY_FREEZE_PROTECTION_ACTIVE,
     KEY_AIR_SENSOR_FAULT,
+    KEY_FREEZE_PROTECTION_ACTIVE,
+    KEY_HEAT_DELAY_ACTIVE,
+    KEY_SOLAR_PRESENT,
     KEY_SOLAR_SENSOR_FAULT,
     KEY_WATER_SENSOR_FAULT,
-    KEY_SOLAR_PRESENT,
 )
+from .coordinator import CompoolConfigEntry
+from .entity import CompoolEntity
 
 COMPOOL_BINARY_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
     BinarySensorEntityDescription(
@@ -73,11 +73,11 @@ async def async_setup_entry(
     """Set up Compool binary sensors."""
     compool_domain_data = config_entry.runtime_data
     coordinator = compool_domain_data.coordinator
-    
+
     device_name = f"Pool Controller {coordinator.host}:{coordinator.port}"
-    
+
     entities: list[CompoolBinarySensor] = []
-    
+
     for description in COMPOOL_BINARY_SENSORS:
         entities.append(
             CompoolBinarySensor(
@@ -86,7 +86,7 @@ async def async_setup_entry(
                 device_name=device_name,
             )
         )
-    
+
     async_add_entities(entities)
 
 
@@ -98,10 +98,10 @@ class CompoolBinarySensor(CompoolEntity, BinarySensorEntity):
         """Return the state of the binary sensor."""
         if not self.coordinator.data:
             return False
-            
+
         sensor_key = self.entity_description.key
         status = self.coordinator.data
-        
+
         if sensor_key == "heat_delay_active":
             return status.get(KEY_HEAT_DELAY_ACTIVE, False)
         elif sensor_key == "freeze_protection_active":
@@ -114,5 +114,5 @@ class CompoolBinarySensor(CompoolEntity, BinarySensorEntity):
             return status.get(KEY_WATER_SENSOR_FAULT, False)
         elif sensor_key == "solar_present":
             return status.get(KEY_SOLAR_PRESENT, False)
-            
+
         return False

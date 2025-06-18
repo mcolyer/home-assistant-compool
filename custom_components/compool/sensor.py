@@ -12,19 +12,18 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
+from .const import (
+    KEY_ACTIVE_HEAT_SOURCE,
+    KEY_FIRMWARE,
+    KEY_POOL_AIR_TEMP,
+    KEY_POOL_WATER_TEMP,
+    KEY_SOLAR_COLLECTOR_TEMP,
+    KEY_SPA_SOLAR_TEMP,
+    KEY_SPA_WATER_TEMP,
+    KEY_TIME,
+)
 from .coordinator import CompoolConfigEntry
 from .entity import CompoolEntity
-from .const import (
-    KEY_FIRMWARE,
-    KEY_TIME,
-    KEY_POOL_WATER_TEMP,
-    KEY_SPA_WATER_TEMP,
-    KEY_SPA_SOLAR_TEMP,
-    KEY_POOL_AIR_TEMP,
-    KEY_SOLAR_COLLECTOR_TEMP,
-    KEY_ACTIVE_HEAT_SOURCE,
-)
-
 
 COMPOOL_SENSORS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
@@ -92,14 +91,14 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Compool sensors."""
-    
+
     compool_domain_data = config_entry.runtime_data
     coordinator = compool_domain_data.coordinator
-    
+
     device_name = f"Pool Controller {coordinator.host}:{coordinator.port}"
-    
+
     entities: list[CompoolSensor] = []
-    
+
     for description in COMPOOL_SENSORS:
         entities.append(
             CompoolSensor(
@@ -108,7 +107,7 @@ async def async_setup_entry(
                 device_name=device_name,
             )
         )
-    
+
     async_add_entities(entities)
 
 
@@ -120,10 +119,10 @@ class CompoolSensor(CompoolEntity, SensorEntity):
         """Return the state of the sensor."""
         if not self.coordinator.data:
             return None
-            
+
         sensor_key = self.entity_description.key
         status = self.coordinator.data
-        
+
         if sensor_key == "pool_controller_firmware":
             return status.get(KEY_FIRMWARE)
         elif sensor_key == "pool_controller_time":
@@ -140,7 +139,7 @@ class CompoolSensor(CompoolEntity, SensorEntity):
             return status.get(KEY_POOL_AIR_TEMP)
         elif sensor_key == "solar_collector_temperature":
             return status.get(KEY_SOLAR_COLLECTOR_TEMP)
-            
+
         return None
 
     @property
@@ -148,7 +147,7 @@ class CompoolSensor(CompoolEntity, SensorEntity):
         """Return the state attributes."""
         if not self.coordinator.data:
             return None
-            
+
         return {
             "host": self.coordinator.host,
             "port": self.coordinator.port,

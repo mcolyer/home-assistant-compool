@@ -1,0 +1,70 @@
+{
+  "config": {
+    "error": {
+      "unknown": "Unknown error occurred.",
+      "cannot_connect": "Failed to connect to the pool controller. Please check the IP address and port."
+    },
+    "step": {
+      "user": {
+        "description": "Enter the IP address and port of your Compool pool controller.",
+        "title": "Connect to your Compool pool controller",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "heat_delay_active": {
+        "name": "Heat Delay Active"
+      },
+      "freeze_protection_active": {
+        "name": "Freeze Protection Active"
+      },
+      "air_sensor_fault": {
+        "name": "Air Sensor Fault"
+      },
+      "solar_sensor_fault": {
+        "name": "Solar Sensor Fault"
+      },
+      "water_sensor_fault": {
+        "name": "Water Sensor Fault"
+      },
+      "solar_present": {
+        "name": "Solar Present"
+      }
+    },
+    "sensor": {
+      "pool_controller_firmware": {
+        "name": "Firmware"
+      },
+      "pool_controller_time": {
+        "name": "Controller Time"
+      },
+      "pool_active_heat_source": {
+        "name": "Active Heat Source"
+      },
+      "pool_water_temperature": {
+        "name": "Pool Water Temperature"
+      },
+      "spa_water_temperature": {
+        "name": "Spa Water Temperature"
+      },
+      "spa_solar_temperature": {
+        "name": "Spa Solar Temperature"
+      },
+      "pool_air_temperature": {
+        "name": "Air Temperature"
+      },
+      "solar_collector_temperature": {
+        "name": "Solar Collector Temperature"
+      }
+    }
+  },
+  "services": {}
+}

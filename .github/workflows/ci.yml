@@ -89,4 +89,4 @@ jobs:
       - name: Hassfest validation
         uses: home-assistant/actions/hassfest@master
         with:
-          path: "./custom_components"
+          path: "./custom_components/compool"

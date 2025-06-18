@@ -150,3 +150,32 @@ The integration includes a comprehensive test suite using pytest with Home Assis
 - Active heat source must be computed from `heater_on`/`solar_on` booleans
 - Temperature field naming is inconsistent (some have _f suffix, some don't)
 - Time is "HH:MM" format, not ISO timestamps
+
+## Release Process
+
+### Creating a Release
+1. **Pre-release checklist**:
+   - Run `scripts/test` to ensure all tests pass
+   - Run `scripts/lint` to ensure code quality
+   - Commit any pending changes (like uv.lock dependency updates)
+   
+2. **Git tagging**:
+   - Create semantic version tag: `git tag v0.1.0`
+   - Push tag to remote: `git push origin v0.1.0`
+   
+3. **GitHub release**:
+   - Use `gh release create v0.1.0 --title "v0.1.0 - Title" --notes "Release notes"`
+   - Include comprehensive release notes with features, installation instructions, and requirements
+   - Reference CHANGELOG.md for organized release content
+
+### Release Notes Best Practices
+- **Structure**: Use clear sections (Features, Installation, Requirements, etc.)
+- **Feature Categories**: Group by sensor types (Temperature, Status, Binary sensors)
+- **Installation Steps**: Include step-by-step setup instructions
+- **Requirements**: Specify HA version, Python version, and dependencies
+- **Technical Details**: Mention polling intervals, communication protocols, and integration features
+
+### Dependency Management
+- uv.lock updates are normal and should be committed before releases
+- Dependency updates typically include: Home Assistant, ruff, pytest plugins, and other dev tools
+- Always test after dependency updates to ensure compatibility

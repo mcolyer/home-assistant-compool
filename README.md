@@ -1,4 +1,4 @@
-# DropCountr Home Assistant Integration
+# Compool Home Assistant Integration
 
 [![GitHub Release][releases-shield]][releases]
 [![GitHub Activity][commits-shield]][commits]
@@ -14,29 +14,30 @@
 [![Discord][discord-shield]][discord]
 [![Community Forum][forum-shield]][forum]
 
-A comprehensive Home Assistant integration for [DropCountr](https://dropcountr.com/) water monitoring systems. Track your water usage, detect leaks, and monitor your consumption patterns with rich sensor data and automation capabilities.
+A comprehensive Home Assistant integration for Compool pool controllers. Monitor your pool and spa temperatures, equipment status, and operational states with real-time sensor data and automation capabilities.
 
 ## ✨ Features
 
-### 📊 **Comprehensive Water Monitoring**
-- **Real-time Usage Data**: Daily water consumption tracking
-- **Irrigation Monitoring**: Separate tracking for irrigation vs. total usage
-- **Leak Detection**: Binary sensor alerts for detected leaks
-- **Connection Status**: Monitor service connection health
-- **Multi-timeframe Analytics**: Daily, weekly, and monthly usage totals
+### 🌡️ **Comprehensive Temperature Monitoring**
+- **Pool Water Temperature**: Real-time pool temperature monitoring
+- **Spa Water Temperature**: Dedicated spa temperature tracking
+- **Air Temperature**: Ambient air temperature sensing
+- **Solar Temperatures**: Solar collector and spa solar temperature monitoring
+- **Precise Readings**: Temperature readings in Fahrenheit with 1°F precision
 
-### 🔧 **Advanced Capabilities**
-- **Complete API Coverage**: Utilizes all PyDropCountr library features
-- **Flexible Data Access**: On-demand hourly usage data via service calls
-- **Service Connection Details**: Detailed metadata for each water meter
-- **Automation Ready**: All sensors available for Home Assistant automations
-- **Unit Conversion**: Automatic conversion between gallons and liters
+### 🔧 **Equipment Status & Control**
+- **Heat Source Monitoring**: Track active heating source (solar, heater, etc.)
+- **System Status**: Monitor heat delay and freeze protection states
+- **Fault Detection**: Sensor fault indicators for air, solar, and water sensors
+- **Solar System**: Solar presence detection and status monitoring
+- **Firmware Info**: Controller firmware version and time display
 
 ### 🏠 **Home Assistant Native**
-- **Config Flow Setup**: Easy configuration through the UI
+- **Local Communication**: Direct RS485 over TCP connection (no cloud dependency)
+- **Real-time Updates**: 30-second polling intervals for responsive monitoring
+- **Config Flow Setup**: Easy IP/port configuration through the UI
 - **Device Registry**: Proper device representation with metadata
-- **Entity Naming**: Follows Home Assistant conventions
-- **Translation Support**: Localized entity names and descriptions
+- **Entity Naming**: Follows Home Assistant conventions with proper device classes
 - **HACS Compatible**: Easy installation and updates
 
 ## 📦 Installation
@@ -47,13 +48,13 @@ A comprehensive Home Assistant integration for [DropCountr](https://dropcountr.c
 2. Go to "Integrations"
 3. Click the three dots in the top right corner
 4. Select "Custom repositories"
-5. Add `https://github.com/mcolyer/home-assistant-dropcountr` as an Integration
-6. Search for "DropCountr" and install
+5. Add `https://github.com/mcolyer/home-assistant-compool` as an Integration
+6. Search for "Compool" and install
 7. Restart Home Assistant
 
 ### Manual Installation
 
-1. Copy the `custom_components/dropcountr` folder to your Home Assistant `custom_components` directory
+1. Copy the `custom_components/compool` folder to your Home Assistant `custom_components` directory
 2. Restart Home Assistant
 3. Add the integration through the UI
 
@@ -63,91 +64,104 @@ A comprehensive Home Assistant integration for [DropCountr](https://dropcountr.c
 
 1. Go to **Settings** → **Devices & Services**
 2. Click **Add Integration**
-3. Search for "DropCountr"
-4. Enter your DropCountr account credentials:
-   - **Email**: Your DropCountr account email
-   - **Password**: Your DropCountr account password
+3. Search for "Compool"
+4. Enter your pool controller connection details:
+   - **Host**: IP address of your RS485 to TCP converter
+   - **Port**: TCP port (default: 8899)
 
-### Authentication
-- Uses simple email/password authentication (no OAuth required)
-- Credentials are stored securely in Home Assistant
-- Supports reauthentication if credentials change
+### Network Requirements
+- **RS485 to TCP Converter**: Required to connect pool controller to network
+- **Local Network Access**: Integration communicates directly with your pool controller
+- **No Cloud Dependencies**: All communication is local to your network
 
 ## 📈 Sensors
 
-The integration creates the following sensors for each service connection:
+The integration creates the following sensors for your pool controller:
 
-### Water Usage Sensors
+### Temperature Sensors
 | Sensor | Description | Unit | Device Class |
 |--------|-------------|------|--------------|
-| **Daily Irrigation** | Latest daily irrigation usage | Gallons | Water |
-| **Irrigation Events** | Number of irrigation events | Count | - |
-| **Daily Total** | Most recent day's usage | Gallons | Water |
-| **Weekly Total** | Last 7 days total usage | Gallons | Water |
-| **Monthly Total** | Current month to date usage | Gallons | Water |
+| **Pool Water Temperature** | Current pool water temperature | °F | Temperature |
+| **Spa Water Temperature** | Current spa water temperature | °F | Temperature |
+| **Spa Solar Temperature** | Spa solar temperature | °F | Temperature |
+| **Air Temperature** | Ambient air temperature | °F | Temperature |
+| **Solar Collector Temperature** | Solar collector temperature | °F | Temperature |
 
 ### Status Sensors
 | Sensor | Description | Device Class |
 |--------|-------------|--------------|
-| **Leak Detected** | Binary sensor for leak detection | Moisture |
-| **Connection Status** | Service connection health | Connectivity |
+| **Firmware** | Controller firmware version | - |
+| **Controller Time** | Controller system time | Timestamp |
+| **Active Heat Source** | Currently active heating source | - |
+
+### Binary Sensors
+| Sensor | Description | Device Class |
+|--------|-------------|--------------|
+| **Heat Delay Active** | Heat delay status indicator | - |
+| **Freeze Protection Active** | Freeze protection status | - |
+| **Air Sensor Fault** | Air sensor fault indicator | Problem |
+| **Solar Sensor Fault** | Solar sensor fault indicator | Problem |
+| **Water Sensor Fault** | Water sensor fault indicator | Problem |
+| **Solar Present** | Solar system presence indicator | - |
 
 ## 🔧 Services
 
-### `dropcountr.list_usage`
-Returns cached daily usage data for all service connections.
-
-### `dropcountr.get_service_connection`
-Retrieves detailed information for a specific service connection.
-
-**Parameters:**
-- `config_entry`: DropCountr integration config entry
-- `service_connection_id`: ID of the service connection
-
-### `dropcountr.get_hourly_usage`
-Fetches hourly granularity usage data with optional date range.
-
-**Parameters:**
-- `config_entry`: DropCountr integration config entry  
-- `service_connection_id`: ID of the service connection
-- `start_date` (optional): Start date in ISO format
-- `end_date` (optional): End date in ISO format
+Currently, no additional services are implemented. All pool controller data is available through the sensor entities listed above. Future versions may include services for pool control functions.
 
 ## 🚀 Automation Examples
 
-### Leak Detection Alert
+### Freeze Protection Alert
 ```yaml
 automation:
-  - alias: "Water Leak Detected"
+  - alias: "Freeze Protection Activated"
     trigger:
       - platform: state
-        entity_id: binary_sensor.dropcountr_main_moisture
+        entity_id: binary_sensor.compool_freeze_protection_active
         to: "on"
     action:
       - service: notify.mobile_app
         data:
-          message: "Water leak detected at main meter!"
-          title: "🚨 Leak Alert"
+          message: "Pool freeze protection has been activated!"
+          title: "🧊 Freeze Protection Alert"
 ```
 
-### High Usage Warning
+### High Temperature Warning
 ```yaml
 automation:
-  - alias: "High Monthly Water Usage"
+  - alias: "Pool Temperature Too High"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.dropcountr_main_monthly_total
-        above: 5000  # 5000 gallons
+        entity_id: sensor.compool_pool_water_temperature
+        above: 90  # 90°F
     action:
       - service: notify.family
         data:
-          message: "Monthly water usage has exceeded 5,000 gallons"
+          message: "Pool temperature is {{ states('sensor.compool_pool_water_temperature') }}°F - consider reducing heat!"
 ```
 
-### Daily Usage Report
+### Sensor Fault Notification
 ```yaml
 automation:
-  - alias: "Daily Water Usage Report"
+  - alias: "Pool Sensor Fault Alert"
+    trigger:
+      - platform: state
+        entity_id: 
+          - binary_sensor.compool_air_sensor_fault
+          - binary_sensor.compool_solar_sensor_fault
+          - binary_sensor.compool_water_sensor_fault
+        to: "on"
+    action:
+      - service: notify.homeowner
+        data:
+          message: >
+            Pool controller sensor fault detected: {{ trigger.to_state.attributes.friendly_name }}
+          title: "⚠️ Pool Controller Alert"
+```
+
+### Daily Pool Report
+```yaml
+automation:
+  - alias: "Daily Pool Status Report"
     trigger:
       - platform: time
         at: "09:00:00"
@@ -155,30 +169,32 @@ automation:
       - service: notify.homeowner
         data:
           message: >
-            Yesterday's water usage: {{ states('sensor.dropcountr_main_daily_total') }} gallons
-            ({{ states('sensor.dropcountr_main_irrigation_gallons') }} irrigation)
+            Pool Status:
+            🌡️ Pool: {{ states('sensor.compool_pool_water_temperature') }}°F
+            🛁 Spa: {{ states('sensor.compool_spa_water_temperature') }}°F
+            ☀️ Active Heat: {{ states('sensor.compool_pool_active_heat_source') }}
 ```
 
 ## 🔄 Data Updates
 
-- **Usage Data**: Updates daily (configurable)
-- **Service Connections**: Updates daily
-- **On-Demand**: Service calls provide immediate data access
+- **Status Data**: Updates every 30 seconds for real-time monitoring
+- **Local Communication**: Direct TCP connection to pool controller
+- **Brief Connections**: Connect, get status, disconnect pattern minimizes network overhead
 
-The integration uses efficient polling intervals that respect DropCountr's API while ensuring data freshness.
+The integration uses efficient local polling that provides real-time updates without overwhelming your network or pool controller.
 
 ## 🛠️ Development
 
 ### Requirements
 - Python 3.13+
 - Home Assistant 2025.6.0+
-- PyDropCountr library
+- pycompool v0.1.2 library
 
 ### Setup Development Environment
 ```bash
 # Clone the repository
-git clone https://github.com/mcolyer/home-assistant-dropcountr.git
-cd home-assistant-dropcountr
+git clone https://github.com/mcolyer/home-assistant-compool.git
+cd home-assistant-compool
 
 # Install dependencies
 scripts/setup
@@ -193,17 +209,17 @@ scripts/develop
 ### Testing
 The integration includes comprehensive test coverage:
 - Unit tests for all components
-- Integration tests with mocked API responses
+- Integration tests with mocked pool controller responses
 - Config flow testing for all scenarios
-- Monthly sensor boundary testing
+- Temperature sensor and binary sensor testing
 
 Run tests with: `scripts/test`
 
 ## 📚 Documentation
 
-- **[PyDropCountr Library](https://pypi.org/project/pydropcountr/)**: Underlying API client
-- **[DropCountr Website](https://dropcountr.com/)**: Official water monitoring service
+- **[pycompool Library](https://pypi.org/project/pycompool/)**: Underlying pool controller communication library
 - **[Home Assistant Developer Docs](https://developers.home-assistant.io/)**: Integration development guide
+- **Compool Controllers**: Compatible with Compool pool automation systems
 
 ## 🤝 Contributing
 
@@ -221,24 +237,24 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## 🐛 Issues & Support
 
-- **Bug Reports**: [GitHub Issues](https://github.com/mcolyer/home-assistant-dropcountr/issues)
-- **Feature Requests**: [GitHub Issues](https://github.com/mcolyer/home-assistant-dropcountr/issues)
+- **Bug Reports**: [GitHub Issues](https://github.com/mcolyer/home-assistant-compool/issues)
+- **Feature Requests**: [GitHub Issues](https://github.com/mcolyer/home-assistant-compool/issues)
 - **Discussion**: [Home Assistant Community](https://community.home-assistant.io/)
 
 ## ⭐ Acknowledgments
 
-- Powered by the [PyDropCountr](https://pypi.org/project/pydropcountr/) library
+- Powered by the [pycompool](https://pypi.org/project/pycompool/) library
 - Inspired by the Home Assistant community's dedication to home automation
 
 ---
 
-**Disclaimer**: This integration is not officially affiliated with DropCountr. Use at your own risk.
+**Disclaimer**: This integration is not officially affiliated with Compool. Use at your own risk.
 
-[releases-shield]: https://img.shields.io/github/release/mcolyer/home-assistant-dropcountr.svg?style=for-the-badge
-[releases]: https://github.com/mcolyer/home-assistant-dropcountr/releases
-[commits-shield]: https://img.shields.io/github/commit-activity/y/mcolyer/home-assistant-dropcountr.svg?style=for-the-badge
-[commits]: https://github.com/mcolyer/home-assistant-dropcountr/commits/main
-[license-shield]: https://img.shields.io/github/license/mcolyer/home-assistant-dropcountr.svg?style=for-the-badge
+[releases-shield]: https://img.shields.io/github/release/mcolyer/home-assistant-compool.svg?style=for-the-badge
+[releases]: https://github.com/mcolyer/home-assistant-compool/releases
+[commits-shield]: https://img.shields.io/github/commit-activity/y/mcolyer/home-assistant-compool.svg?style=for-the-badge
+[commits]: https://github.com/mcolyer/home-assistant-compool/commits/main
+[license-shield]: https://img.shields.io/github/license/mcolyer/home-assistant-compool.svg?style=for-the-badge
 [pre-commit]: https://github.com/pre-commit/pre-commit
 [pre-commit-shield]: https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=for-the-badge
 [black]: https://github.com/psf/black

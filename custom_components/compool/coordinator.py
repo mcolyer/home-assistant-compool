@@ -86,8 +86,8 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _get_pool_status_with_retry(self) -> dict[str, Any]:
         """Get pool controller status with retry logic for connection failures."""
-        max_retries = 3
-        base_delay = 2  # seconds
+        max_retries = 5
+        base_delay = 3  # seconds
 
         for attempt in range(max_retries + 1):
             try:

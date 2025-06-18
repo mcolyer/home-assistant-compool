@@ -1,0 +1,11 @@
+{
+  "domain": "compool",
+  "name": "Compool",
+  "version": "0.1.0",
+  "codeowners": ["@mcolyer"],
+  "config_flow": true,
+  "documentation": "https://github.com/mcolyer/pycompool",
+  "iot_class": "local_polling",
+  "loggers": ["pycompool"],
+  "requirements": ["pycompool==0.1.2"]
+}

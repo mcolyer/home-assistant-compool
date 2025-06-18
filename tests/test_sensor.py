@@ -1,9 +1,9 @@
-"""Test DropCountr sensor platform."""
+"""Test Compool sensor platform."""
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.dropcountr.const import DOMAIN
+from custom_components.compool.const import DOMAIN
 from homeassistant.core import HomeAssistant
 
 from .const import MOCK_CONFIG
@@ -17,26 +17,20 @@ async def test_sensors(hass: HomeAssistant) -> None:
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
-    # Test that sensors are created with clean entity IDs
-    daily_irrigation = hass.states.get("sensor.daily_irrigation")
-    assert daily_irrigation is not None
-    assert daily_irrigation.state == "189.6491303784"  # 50.1 gallons in liters
+    # Check that sensor entities exist
+    sensors = [
+        state
+        for state in hass.states.async_all()
+        if state.entity_id.startswith("sensor.")
+    ]
 
-    irrigation_events = hass.states.get("sensor.irrigation_events")
-    assert irrigation_events is not None
-    assert irrigation_events.state == "2.0"
+    # We should have 8 sensors
+    assert len(sensors) == 8
 
-    daily_total = hass.states.get("sensor.daily_total")
-    assert daily_total is not None
-    assert daily_total.state == "455.3850376152"  # Latest day total in liters
-
-    weekly_total = hass.states.get("sensor.weekly_total")
-    assert weekly_total is not None
-    assert weekly_total.state == "2842.0871674272"  # Sum of last 7 days in liters
-
-    monthly_total = hass.states.get("sensor.monthly_total")
-    assert monthly_total is not None
-    # June total (when test runs in current month): varies based on test date
-    # Just verify it's a valid number and not None
-    assert monthly_total.state is not None
-    assert float(monthly_total.state) >= 0
+    # All sensors should be from this integration
+    for sensor in sensors:
+        assert sensor.entity_id.startswith("sensor.pool_controller_192_168_1_100_8899")
+        assert (
+            sensor.attributes.get("attribution")
+            == "Data provided by Compool pool controller"
+        )

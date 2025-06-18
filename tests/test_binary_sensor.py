@@ -1,9 +1,9 @@
-"""Test DropCountr binary sensor platform."""
+"""Test Compool binary sensor platform."""
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.dropcountr.const import DOMAIN
+from custom_components.compool.const import DOMAIN
 from homeassistant.core import HomeAssistant
 
 from .const import MOCK_CONFIG
@@ -17,12 +17,24 @@ async def test_binary_sensors(hass: HomeAssistant) -> None:
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
 
-    # Test leak detection sensor
-    leak_detected = hass.states.get("binary_sensor.leak_detected")
-    assert leak_detected is not None
-    assert leak_detected.state == "off"  # Mock data shows no leak
+    # Check that binary sensor entities exist
+    binary_sensors = [
+        state
+        for state in hass.states.async_all()
+        if state.entity_id.startswith("binary_sensor.")
+    ]
 
-    # Test connection status sensor
-    connection_status = hass.states.get("binary_sensor.connection_status")
-    assert connection_status is not None
-    assert connection_status.state == "on"  # Should be on since we have data
+    # We should have 6 binary sensors
+    assert len(binary_sensors) == 6
+
+    # All binary sensors should be from this integration
+    for sensor in binary_sensors:
+        assert sensor.entity_id.startswith(
+            "binary_sensor.pool_controller_192_168_1_100_8899"
+        )
+        assert (
+            sensor.attributes.get("attribution")
+            == "Data provided by Compool pool controller"
+        )
+        # State should be either 'on' or 'off'
+        assert sensor.state in ["on", "off"]

@@ -151,5 +151,5 @@ class CompoolSensor(CompoolEntity, SensorEntity):
         return {
             "host": self.coordinator.host,
             "port": self.coordinator.port,
-            "last_updated": self.coordinator.last_update_success_time,
+            "last_updated": self.coordinator.last_update_success,
         }

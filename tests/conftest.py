@@ -1,10 +1,14 @@
 """Global fixtures for Compool integration tests."""
 
-from unittest.mock import patch
+# Mock pycompool module at the module level
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from .const import MOCK_POOL_STATUS
+
+sys.modules["pycompool"] = MagicMock()
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +32,10 @@ def bypass_get_data_fixture():
     """Skip calls to get data from pool controller."""
 
     with (
-        patch("pycompool.PoolController.get_status", return_value=MOCK_POOL_STATUS),
+        patch(
+            "custom_components.compool.coordinator.PoolController.get_status",
+            return_value=MOCK_POOL_STATUS,
+        ),
     ):
         yield
 
@@ -37,7 +44,7 @@ def bypass_get_data_fixture():
 def error_on_connect_fixture():
     """Simulate error when connecting to pool controller."""
     with patch(
-        "pycompool.PoolController.get_status",
-        side_effect=Exception("Connection failed"),
+        "custom_components.compool.coordinator.CompoolStatusDataUpdateCoordinator._get_pool_status",
+        return_value=None,
     ):
         yield

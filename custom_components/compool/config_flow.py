@@ -25,6 +25,11 @@ DATA_SCHEMA = vol.Schema(
 )
 
 
+def _raise_no_status_connect_error() -> None:
+    """Raise CannotConnect for no status data."""
+    raise CannotConnect("No status data received from pool controller")
+
+
 def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> PoolController:
     """Validate in the executor."""
     host = data[CONF_HOST]
@@ -33,17 +38,17 @@ def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> PoolController
     # Create RS485 over TCP connection string
     device = f"socket://{host}:{port}"
     _LOGGER.debug("Testing connection to %s", device)
-    
+
     try:
         controller = PoolController(device, 9600)
         # Test connection by getting status
         status = controller.get_status()
         _LOGGER.debug("Received status: %s", status)
-        
+
         if not status:
-            raise CannotConnect("No status data received from pool controller")
-            
-        return controller
+            _raise_no_status_connect_error()
+        else:
+            return controller
     except Exception as err:
         _LOGGER.error("Failed to connect to pool controller at %s: %s", device, err)
         raise CannotConnect(f"Connection failed: {err}") from err

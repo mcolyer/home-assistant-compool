@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from pycompool import PoolController
@@ -48,32 +49,86 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.host = host
         self.port = port
         self._device = f"socket://{host}:{port}"
+        self._consecutive_failures = 0
+        self._last_failure_time = 0
 
-    def _get_pool_status(self) -> dict[str, Any] | None:
-        """Get pool controller status with brief connection."""
-        try:
-            controller = PoolController(self._device, 9600)
-            status = controller.get_status()
-            # Controller automatically disconnects after get_status
-        except Exception as ex:
-            _LOGGER.error(f"Error getting pool controller status: {ex}")
-            return None
-        else:
-            return status
+    def _is_connection_timeout_error(self, exception: Exception) -> bool:
+        """Check if the exception is a connection timeout error."""
+        error_msg = str(exception).lower()
+        return any(
+            keyword in error_msg
+            for keyword in [
+                "timed out",
+                "timeout",
+                "connection refused",
+                "could not open port",
+            ]
+        )
 
-    def _raise_if_no_status(self, status: dict[str, Any] | None) -> None:
-        """Raise UpdateFailed if status is None."""
-        if status is None:
-            raise UpdateFailed("Failed to get pool controller status")
+    def _raise_no_status_error(self) -> None:
+        """Raise UpdateFailed for no status data."""
+        raise UpdateFailed("No status data received from pool controller")
+
+    def _get_pool_status_with_retry(self) -> dict[str, Any]:
+        """Get pool controller status with retry logic for connection failures."""
+        max_retries = 3
+        base_delay = 2  # seconds
+
+        for attempt in range(max_retries + 1):
+            try:
+                controller = PoolController(self._device, 9600)
+                status = controller.get_status()
+                # Controller automatically disconnects after get_status
+
+                # Reset failure tracking on success
+                self._consecutive_failures = 0
+                self._last_failure_time = 0
+
+                if not status:
+                    self._raise_no_status_error()
+                else:
+                    return status
+
+            except Exception as ex:
+                if attempt < max_retries and self._is_connection_timeout_error(ex):
+                    delay = base_delay * (2**attempt)  # Exponential backoff
+                    _LOGGER.warning(
+                        "Connection attempt %d/%d failed: %s. Retrying in %d seconds...",
+                        attempt + 1,
+                        max_retries + 1,
+                        ex,
+                        delay,
+                    )
+                    time.sleep(delay)
+                    continue
+
+                # Track consecutive failures for connection timeout errors
+                if self._is_connection_timeout_error(ex):
+                    self._consecutive_failures += 1
+                    self._last_failure_time = time.time()
+
+                    # Log different messages based on failure count
+                    if self._consecutive_failures <= 3:
+                        _LOGGER.warning(
+                            "Connection timeout (%d/%d): %s - will retry on next update",
+                            self._consecutive_failures,
+                            3,
+                            ex,
+                        )
+                    else:
+                        _LOGGER.error(
+                            "Persistent connection failures (%d consecutive): %s",
+                            self._consecutive_failures,
+                            ex,
+                        )
+                else:
+                    _LOGGER.error("Error getting pool controller status: %s", ex)
+
+                # Re-raise the exception to let the coordinator handle it
+                raise UpdateFailed(
+                    f"Failed to get pool controller status: {ex}"
+                ) from ex
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update pool controller status."""
-        try:
-            status = await self.hass.async_add_executor_job(self._get_pool_status)
-            self._raise_if_no_status(status)
-        except Exception as ex:
-            raise UpdateFailed(
-                f"Error communicating with pool controller: {ex}"
-            ) from ex
-        else:
-            return status
+        return await self.hass.async_add_executor_job(self._get_pool_status_with_retry)

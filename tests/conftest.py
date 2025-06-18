@@ -44,7 +44,7 @@ def bypass_get_data_fixture():
 def error_on_connect_fixture():
     """Simulate error when connecting to pool controller."""
     with patch(
-        "custom_components.compool.coordinator.CompoolStatusDataUpdateCoordinator._get_pool_status",
-        return_value=None,
+        "custom_components.compool.coordinator.CompoolStatusDataUpdateCoordinator._get_pool_status_with_retry",
+        side_effect=Exception("Connection failed"),
     ):
         yield

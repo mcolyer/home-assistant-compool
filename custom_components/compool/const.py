@@ -27,14 +27,14 @@ CONF_PORT = "port"
 DEFAULT_PORT = 8899
 
 # Pool controller status data keys
-KEY_FIRMWARE = "firmware"
+KEY_FIRMWARE = "version"
 KEY_TIME = "time"
 KEY_POOL_WATER_TEMP = "pool_water_temp_f"
 KEY_SPA_WATER_TEMP = "spa_water_temp_f"
-KEY_SPA_SOLAR_TEMP = "spa_solar_temp_f"
-KEY_POOL_AIR_TEMP = "pool_air_temp_f"
-KEY_SOLAR_COLLECTOR_TEMP = "solar_collector_temp_f"
-KEY_ACTIVE_HEAT_SOURCE = "active_heat_source"
+KEY_SPA_SOLAR_TEMP = "spa_solar_temp"  # Note: no _f suffix in pycompool
+KEY_POOL_AIR_TEMP = "air_temp_f"
+KEY_SOLAR_COLLECTOR_TEMP = "pool_solar_temp_f"  # This is the solar collector temp
+KEY_ACTIVE_HEAT_SOURCE = "active_heat_source"  # Will be computed from heat source bits
 KEY_HEAT_DELAY_ACTIVE = "heat_delay_active"
 KEY_FREEZE_PROTECTION_ACTIVE = "freeze_protection_active"
 KEY_AIR_SENSOR_FAULT = "air_sensor_fault"

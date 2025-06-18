@@ -44,6 +44,13 @@ The integration utilizes pycompool APIs:
 - ✅ `get_status()` - Used for connection validation and data polling
 - ✅ Connection management - Automatic connect/disconnect for each status query
 
+### Important API Data Structure Notes
+- **Firmware Version**: pycompool returns `"version"` key (integer), not `"firmware"` 
+- **Active Heat Source**: No direct field - must be computed from `heater_on` and `solar_on` boolean status
+- **Temperature Keys**: Follow specific naming conventions (e.g., `air_temp_f`, `pool_solar_temp_f`, `spa_solar_temp` without _f suffix)
+- **Time Format**: Returns as "HH:MM" string format, not ISO timestamp
+- **Status Fields**: Include `heater_on`, `solar_on`, `freeze_protection_active`, sensor fault flags
+
 ### Available Sensors
 
 **Temperature Sensors:**
@@ -123,3 +130,23 @@ The integration includes a comprehensive test suite using pytest with Home Assis
 - Create realistic mock data that matches expected API responses
 - Test both happy path and error conditions
 - Use pytest fixtures for consistent test data
+
+## Debugging Sensor Issues
+
+### Common Sensor Problems
+- **"Unknown" Values**: Usually indicates incorrect data key mapping between pycompool API and const.py
+- **Missing Fields**: Some sensor values need to be computed from other status fields (e.g., active_heat_source)
+- **Temperature Mapping**: Ensure temperature sensor keys match pycompool's exact field names
+
+### Debugging Steps
+1. **Check pycompool API docs** for actual field names and data structure
+2. **Verify const.py mappings** - ensure KEY_* constants match pycompool field names exactly
+3. **Add computed fields** in coordinator's `_enhance_status_data()` method for derived values
+4. **Update test mock data** to match real pycompool response format
+5. **Use `uv run python -c "..."` for testing** - never use `python3` directly
+
+### Key API Differences to Watch For
+- pycompool uses `"version"` not `"firmware"` for firmware version
+- Active heat source must be computed from `heater_on`/`solar_on` booleans
+- Temperature field naming is inconsistent (some have _f suffix, some don't)
+- Time is "HH:MM" format, not ISO timestamps

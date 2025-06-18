@@ -10,9 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fix entity naming issue where entities appeared as "pool_controller_none" by adding proper English translations
 - Entities now display with descriptive names like "Pool Water Temperature", "Heat Delay Active", etc.
+- Fix Pool Controller Firmware sensor showing "Unknown" by using correct 'version' key from pycompool API
+- Fix Pool Controller Active Heat Source sensor by computing value from heater_on/solar_on status
+- Update temperature sensor key mappings to match pycompool library format
 
 ### Added
 - English translation file (`translations/en.json`) for proper entity naming
+- Computed field logic in coordinator for deriving active heat source from system status
+- Enhanced status data processing to handle pycompool API differences
+- Comprehensive sensor debugging documentation in CLAUDE.md
+
+### Technical Details
+- Updated const.py sensor key mappings to match pycompool API field names
+- Added _enhance_status_data() method in coordinator to compute derived sensor values
+- Updated test mock data to reflect actual pycompool response structure
 
 ## [0.1.0] - Initial Release
 

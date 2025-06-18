@@ -47,7 +47,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self.host = host
         self.port = port
-        self._device = f"{host}:{port}"
+        self._device = f"socket://{host}:{port}"
 
     def _get_pool_status(self) -> dict[str, Any] | None:
         """Get pool controller status with brief connection."""

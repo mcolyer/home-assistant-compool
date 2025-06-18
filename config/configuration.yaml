@@ -9,4 +9,5 @@ homeassistant:
 logger:
   default: info
   logs:
-    custom_components.dropcountr: debug
+    custom_components.compool: debug
+    pycompool: debug

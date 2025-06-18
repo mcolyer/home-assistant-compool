@@ -31,15 +31,22 @@ def _validate_input(hass: HomeAssistant, data: dict[str, Any]) -> PoolController
     port = data[CONF_PORT]
 
     # Create RS485 over TCP connection string
-    device = f"{host}:{port}"
-    controller = PoolController(device, 9600)
-
-    # Test connection by getting status
-    status = controller.get_status()
-    if status is None:
-        raise CannotConnect("Failed to get pool controller status")
-
-    return controller
+    device = f"socket://{host}:{port}"
+    _LOGGER.debug("Testing connection to %s", device)
+    
+    try:
+        controller = PoolController(device, 9600)
+        # Test connection by getting status
+        status = controller.get_status()
+        _LOGGER.debug("Received status: %s", status)
+        
+        if not status:
+            raise CannotConnect("No status data received from pool controller")
+            
+        return controller
+    except Exception as err:
+        _LOGGER.error("Failed to connect to pool controller at %s: %s", device, err)
+        raise CannotConnect(f"Connection failed: {err}") from err
 
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:

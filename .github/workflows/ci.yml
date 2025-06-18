@@ -37,8 +37,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
 
       - name: Install dependencies
         run: uv sync --all-extras --dev
@@ -66,8 +64,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
-        with:
-          version: "latest"
 
       - name: Install dependencies
         run: uv sync --all-extras --dev

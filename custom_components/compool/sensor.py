@@ -34,7 +34,6 @@ COMPOOL_SENSORS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="pool_controller_time",
         translation_key="pool_controller_time",
-        device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:clock",
     ),
     SensorEntityDescription(

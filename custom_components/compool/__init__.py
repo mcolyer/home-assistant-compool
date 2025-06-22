@@ -20,7 +20,9 @@ from .const import (
     SERVICE_SET_POOL_TEMPERATURE,
     SERVICE_SET_SPA_TEMPERATURE,
     TARGETS,
+    TEMP_MAX_C,
     TEMP_MAX_F,
+    TEMP_MIN_C,
     TEMP_MIN_F,
 )
 from .coordinator import (
@@ -73,13 +75,31 @@ def async_register_services(
     """Register Compool services."""
 
     # Service schemas
+    def validate_temperature(data):
+        """Validate temperature based on unit."""
+        temperature = data[ATTR_TEMPERATURE]
+        unit = data.get(ATTR_UNIT, "f")
+
+        if unit.lower() == "c":
+            if not (TEMP_MIN_C <= temperature <= TEMP_MAX_C):
+                raise vol.Invalid(
+                    f"Temperature must be between {TEMP_MIN_C}°C and {TEMP_MAX_C}°C"
+                )
+        elif not (TEMP_MIN_F <= temperature <= TEMP_MAX_F):
+            raise vol.Invalid(
+                f"Temperature must be between {TEMP_MIN_F}°F and {TEMP_MAX_F}°F"
+            )
+
+        return data
+
     set_temperature_schema = vol.Schema(
-        {
-            vol.Required(ATTR_TEMPERATURE): vol.All(
-                vol.Coerce(float), vol.Range(min=TEMP_MIN_F, max=TEMP_MAX_F)
-            ),
-            vol.Optional(ATTR_UNIT, default="f"): vol.In(["f", "c"]),
-        }
+        vol.All(
+            {
+                vol.Required(ATTR_TEMPERATURE): vol.Coerce(float),
+                vol.Optional(ATTR_UNIT, default="f"): vol.In(["f", "c"]),
+            },
+            validate_temperature,
+        )
     )
 
     set_heater_mode_schema = vol.Schema(

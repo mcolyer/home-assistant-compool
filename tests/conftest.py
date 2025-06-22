@@ -36,6 +36,18 @@ def bypass_get_data_fixture():
             "custom_components.compool.coordinator.PoolController.get_status",
             return_value=MOCK_POOL_STATUS,
         ),
+        patch(
+            "custom_components.compool.coordinator.PoolController.set_pool_temperature",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.compool.coordinator.PoolController.set_spa_temperature",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.compool.coordinator.PoolController.set_heater_mode",
+            return_value=True,
+        ),
     ):
         yield
 

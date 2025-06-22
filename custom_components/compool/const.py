@@ -11,6 +11,8 @@ DOMAIN = "compool"
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
+    Platform.NUMBER,
+    Platform.SELECT,
     Platform.SENSOR,
 ]
 
@@ -41,3 +43,26 @@ KEY_AIR_SENSOR_FAULT = "air_sensor_fault"
 KEY_SOLAR_SENSOR_FAULT = "solar_sensor_fault"
 KEY_WATER_SENSOR_FAULT = "water_sensor_fault"
 KEY_SOLAR_PRESENT = "solar_present"
+
+# Service names
+SERVICE_SET_POOL_TEMPERATURE = "set_pool_temperature"
+SERVICE_SET_SPA_TEMPERATURE = "set_spa_temperature"
+SERVICE_SET_HEATER_MODE = "set_heater_mode"
+
+# Service field names
+ATTR_TEMPERATURE = "temperature"
+ATTR_UNIT = "unit"
+ATTR_MODE = "mode"
+ATTR_TARGET = "target"
+
+# Valid heater modes
+HEATER_MODES = ["off", "heater", "solar-priority", "solar-only"]
+
+# Valid targets
+TARGETS = ["pool", "spa"]
+
+# Temperature ranges
+TEMP_MIN_F = 50
+TEMP_MAX_F = 104
+TEMP_MIN_C = 10
+TEMP_MAX_C = 40

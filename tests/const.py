@@ -29,4 +29,13 @@ MOCK_POOL_STATUS = {
     "solar_sensor_fault": False,
     "water_sensor_fault": False,
     "solar_present": True,
+    # Auxiliary equipment status
+    "aux1_on": True,
+    "aux2_on": False,
+    "aux3_on": True,
+    "aux4_on": False,
+    "aux5_on": False,
+    "aux6_on": True,
+    "aux7_on": False,
+    "aux8_on": False,
 }

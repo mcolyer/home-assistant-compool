@@ -14,6 +14,7 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
+    Platform.SWITCH,
 ]
 
 DEFAULT_NAME = "Compool Pool Controller"
@@ -43,6 +44,16 @@ KEY_AIR_SENSOR_FAULT = "air_sensor_fault"
 KEY_SOLAR_SENSOR_FAULT = "solar_sensor_fault"
 KEY_WATER_SENSOR_FAULT = "water_sensor_fault"
 KEY_SOLAR_PRESENT = "solar_present"
+
+# Auxiliary equipment status keys
+KEY_AUX1_ON = "aux1_on"
+KEY_AUX2_ON = "aux2_on"
+KEY_AUX3_ON = "aux3_on"
+KEY_AUX4_ON = "aux4_on"
+KEY_AUX5_ON = "aux5_on"
+KEY_AUX6_ON = "aux6_on"
+KEY_AUX7_ON = "aux7_on"
+KEY_AUX8_ON = "aux8_on"
 
 # Service names
 SERVICE_SET_POOL_TEMPERATURE = "set_pool_temperature"

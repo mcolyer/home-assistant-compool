@@ -207,3 +207,18 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return await self.hass.async_add_executor_job(
             self._set_heater_mode, mode, target
         )
+
+    def _set_aux_equipment(self, aux_num: int, state: bool) -> bool:
+        """Set auxiliary equipment state using pycompool."""
+        try:
+            controller = PoolController(self._device, 9600)
+            return controller.set_aux_equipment(aux_num, state)
+        except Exception as ex:
+            _LOGGER.error("Error setting aux%d equipment: %s", aux_num, ex)
+            return False
+
+    async def async_set_aux_equipment(self, aux_num: int, state: bool) -> bool:
+        """Set auxiliary equipment state."""
+        return await self.hass.async_add_executor_job(
+            self._set_aux_equipment, aux_num, state
+        )

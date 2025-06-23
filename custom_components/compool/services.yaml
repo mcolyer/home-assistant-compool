@@ -1,1 +1,80 @@
-# No services currently implemented for Compool integration
+set_pool_temperature:
+  name: Set pool temperature
+  description: Set the target temperature for the pool
+  fields:
+    temperature:
+      name: Temperature
+      description: Target temperature value
+      required: true
+      example: 80
+      selector:
+        number:
+          min: 50
+          max: 104
+          step: 1
+          unit_of_measurement: "°F"
+    unit:
+      name: Unit
+      description: Temperature unit (f for Fahrenheit, c for Celsius)
+      required: false
+      default: "f"
+      example: "f"
+      selector:
+        select:
+          options:
+            - "f"
+            - "c"
+
+set_spa_temperature:
+  name: Set spa temperature
+  description: Set the target temperature for the spa
+  fields:
+    temperature:
+      name: Temperature
+      description: Target temperature value
+      required: true
+      example: 104
+      selector:
+        number:
+          min: 50
+          max: 104
+          step: 1
+          unit_of_measurement: "°F"
+    unit:
+      name: Unit
+      description: Temperature unit (f for Fahrenheit, c for Celsius)
+      required: false
+      default: "f"
+      example: "f"
+      selector:
+        select:
+          options:
+            - "f"
+            - "c"
+
+set_heater_mode:
+  name: Set heater mode
+  description: Set the heater/solar mode for pool or spa
+  fields:
+    mode:
+      name: Mode
+      description: Heating mode
+      required: true
+      example: "heater"
+      selector:
+        select:
+          options:
+            - "off"
+            - "heater"
+            - "solar-priority"
+            - "solar-only"
+    target:
+      name: Target
+      description: Pool or spa
+      required: true
+      example: "pool"
+      selector:
+        select:
+          options:
+            - "pool"
+            - "spa"

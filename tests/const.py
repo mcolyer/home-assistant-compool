@@ -1,6 +1,12 @@
 """Constants for Compool tests."""
 
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.compool.const import DOMAIN
+
 MOCK_CONFIG = {"host": "192.168.1.100", "port": 8899}
+
+MOCK_CONFIG_ENTRY = MockConfigEntry(domain=DOMAIN, data=MOCK_CONFIG)
 
 MOCK_POOL_STATUS = {
     "version": 23,  # Firmware version as integer
@@ -10,9 +16,13 @@ MOCK_POOL_STATUS = {
     "spa_solar_temp": 78.1,  # No _f suffix for spa solar
     "air_temp_f": 75.8,
     "pool_solar_temp_f": 95.3,  # This is the solar collector temp
-    "heater_on": False,
-    "solar_on": True,
-    "active_heat_source": "solar",  # Will be computed by coordinator
+    "desired_pool_temp_f": 80.0,  # Target pool temperature
+    "desired_spa_temp_f": 104.0,  # Target spa temperature
+    "heater_on": True,
+    "solar_on": False,
+    "spa_heater_on": False,  # For spa heater mode select
+    "spa_solar_on": False,  # For spa heater mode select
+    "active_heat_source": "heater",  # Will be computed by coordinator
     "heat_delay_active": False,
     "freeze_protection_active": False,
     "air_sensor_fault": False,

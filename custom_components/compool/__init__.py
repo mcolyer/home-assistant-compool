@@ -2,11 +2,29 @@
 
 from __future__ import annotations
 
+import voluptuous as vol
+
 from homeassistant.const import CONF_HOST, CONF_PORT
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import PLATFORMS
+from .const import (
+    ATTR_MODE,
+    ATTR_TARGET,
+    ATTR_TEMPERATURE,
+    ATTR_UNIT,
+    DOMAIN,
+    HEATER_MODES,
+    PLATFORMS,
+    SERVICE_SET_HEATER_MODE,
+    SERVICE_SET_POOL_TEMPERATURE,
+    SERVICE_SET_SPA_TEMPERATURE,
+    TARGETS,
+    TEMP_MAX_C,
+    TEMP_MAX_F,
+    TEMP_MIN_C,
+    TEMP_MIN_F,
+)
 from .coordinator import (
     CompoolConfigEntry,
     CompoolRuntimeData,
@@ -32,6 +50,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CompoolConfigEntry) -> b
         entry.runtime_data = CompoolRuntimeData(coordinator=coordinator)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # Register services
+        async_register_services(hass, coordinator)
     except Exception as ex:
         raise ConfigEntryNotReady(
             f"Unable to connect to pool controller at {host}:{port}"
@@ -42,4 +63,95 @@ async def async_setup_entry(hass: HomeAssistant, entry: CompoolConfigEntry) -> b
 
 async def async_unload_entry(hass: HomeAssistant, entry: CompoolConfigEntry) -> bool:
     """Unload a config entry."""
+    # Unregister services
+    async_unregister_services(hass)
+
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+def async_register_services(
+    hass: HomeAssistant, coordinator: CompoolStatusDataUpdateCoordinator
+) -> None:
+    """Register Compool services."""
+
+    # Service schemas
+    def validate_temperature(data):
+        """Validate temperature based on unit."""
+        temperature = data[ATTR_TEMPERATURE]
+        unit = data.get(ATTR_UNIT, "f")
+
+        if unit.lower() == "c":
+            if not (TEMP_MIN_C <= temperature <= TEMP_MAX_C):
+                raise vol.Invalid(
+                    f"Temperature must be between {TEMP_MIN_C}°C and {TEMP_MAX_C}°C"
+                )
+        elif not (TEMP_MIN_F <= temperature <= TEMP_MAX_F):
+            raise vol.Invalid(
+                f"Temperature must be between {TEMP_MIN_F}°F and {TEMP_MAX_F}°F"
+            )
+
+        return data
+
+    set_temperature_schema = vol.Schema(
+        vol.All(
+            {
+                vol.Required(ATTR_TEMPERATURE): vol.Coerce(float),
+                vol.Optional(ATTR_UNIT, default="f"): vol.In(["f", "c"]),
+            },
+            validate_temperature,
+        )
+    )
+
+    set_heater_mode_schema = vol.Schema(
+        {
+            vol.Required(ATTR_MODE): vol.In(HEATER_MODES),
+            vol.Required(ATTR_TARGET): vol.In(TARGETS),
+        }
+    )
+
+    async def async_set_pool_temperature(call: ServiceCall) -> None:
+        """Handle set pool temperature service call."""
+        temperature = call.data[ATTR_TEMPERATURE]
+        unit = call.data[ATTR_UNIT]
+        await coordinator.async_set_pool_temperature(temperature, unit)
+
+    async def async_set_spa_temperature(call: ServiceCall) -> None:
+        """Handle set spa temperature service call."""
+        temperature = call.data[ATTR_TEMPERATURE]
+        unit = call.data[ATTR_UNIT]
+        await coordinator.async_set_spa_temperature(temperature, unit)
+
+    async def async_set_heater_mode(call: ServiceCall) -> None:
+        """Handle set heater mode service call."""
+        mode = call.data[ATTR_MODE]
+        target = call.data[ATTR_TARGET]
+        await coordinator.async_set_heater_mode(mode, target)
+
+    # Register services
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_POOL_TEMPERATURE,
+        async_set_pool_temperature,
+        schema=set_temperature_schema,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_SPA_TEMPERATURE,
+        async_set_spa_temperature,
+        schema=set_temperature_schema,
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_HEATER_MODE,
+        async_set_heater_mode,
+        schema=set_heater_mode_schema,
+    )
+
+
+def async_unregister_services(hass: HomeAssistant) -> None:
+    """Unregister Compool services."""
+    hass.services.async_remove(DOMAIN, SERVICE_SET_POOL_TEMPERATURE)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_SPA_TEMPERATURE)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_HEATER_MODE)

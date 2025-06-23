@@ -149,3 +149,61 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update pool controller status."""
         return await self.hass.async_add_executor_job(self._get_pool_status_with_retry)
+
+    def _format_temperature_string(self, temperature: float, unit: str) -> str:
+        """Format temperature and unit for pycompool API."""
+        if unit.lower() == "c":
+            return f"{temperature}c"
+        else:
+            return f"{int(temperature)}f"
+
+    def _set_pool_temperature(self, temperature: float, unit: str) -> bool:
+        """Set pool temperature using pycompool."""
+        try:
+            controller = PoolController(self._device, 9600)
+            temp_str = self._format_temperature_string(temperature, unit)
+            return controller.set_pool_temperature(temp_str)
+        except Exception as ex:
+            _LOGGER.error("Error setting pool temperature: %s", ex)
+            return False
+
+    def _set_spa_temperature(self, temperature: float, unit: str) -> bool:
+        """Set spa temperature using pycompool."""
+        try:
+            controller = PoolController(self._device, 9600)
+            temp_str = self._format_temperature_string(temperature, unit)
+            return controller.set_spa_temperature(temp_str)
+        except Exception as ex:
+            _LOGGER.error("Error setting spa temperature: %s", ex)
+            return False
+
+    def _set_heater_mode(self, mode: str, target: str) -> bool:
+        """Set heater mode using pycompool."""
+        try:
+            controller = PoolController(self._device, 9600)
+            return controller.set_heater_mode(mode, target)
+        except Exception as ex:
+            _LOGGER.error("Error setting heater mode: %s", ex)
+            return False
+
+    async def async_set_pool_temperature(
+        self, temperature: float, unit: str = "f"
+    ) -> bool:
+        """Set pool temperature."""
+        return await self.hass.async_add_executor_job(
+            self._set_pool_temperature, temperature, unit
+        )
+
+    async def async_set_spa_temperature(
+        self, temperature: float, unit: str = "f"
+    ) -> bool:
+        """Set spa temperature."""
+        return await self.hass.async_add_executor_job(
+            self._set_spa_temperature, temperature, unit
+        )
+
+    async def async_set_heater_mode(self, mode: str, target: str) -> bool:
+        """Set heater mode."""
+        return await self.hass.async_add_executor_job(
+            self._set_heater_mode, mode, target
+        )

@@ -75,7 +75,31 @@ The integration utilizes pycompool APIs:
 
 ## Development Environment
 
-The integration includes a development container setup with Home Assistant pre-configured. The `config/configuration.yaml` enables debug logging for the custom component. The PYTHONPATH is modified during development to include the custom_components directory.
+The integration includes both development container and flox environment setups:
+
+### Flox Environment (Optional)
+This project includes a flox environment configuration for developers who use flox for package and environment management:
+
+- **Manifest Location**: `.flox/env/manifest.toml` (not in project root)
+- **Python Version**: 3.13.3 via `python313` package
+- **Key Dependencies**: `bash`, `uv`, `pkg-config`, `gcc` for building Python packages
+- **Environment Variables**: 
+  - `PYTHONPATH="./.venv/lib/python3.13/site-packages:./custom_components"` 
+  - `UV_PYTHON="3.13.3"`
+
+#### Important Flox Considerations
+- **Multiple Environment Conflicts**: If your shell loads both default (`~/.flox`) and project-specific flox environments, Python path conflicts can occur
+- **Test Execution**: The `scripts/test` script explicitly sets `PYTHONPATH` to prioritize venv packages over system packages to avoid import conflicts
+- **PIL/Pillow Issues**: If PIL import errors occur, it's usually due to Python path ordering - the scripts handle this with explicit path management
+- **Script Compatibility**: All scripts use `uv run` for better environment isolation rather than manual venv activation
+
+#### Flox vs Standard Development
+- **With Flox**: Use `flox activate` to enter environment, then run `scripts/test`, `scripts/lint`
+- **Without Flox**: Use standard `python -m venv` and pip workflows
+- **Both Approaches**: Supported - the project works with or without flox
+
+### Development Container
+The integration also includes a development container setup with Home Assistant pre-configured. The `config/configuration.yaml` enables debug logging for the custom component.
 
 ## Testing
 

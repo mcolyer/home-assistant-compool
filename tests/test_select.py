@@ -5,7 +5,6 @@ from unittest.mock import patch
 from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_OPTION
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from .const import MOCK_CONFIG_ENTRY
 
@@ -18,30 +17,34 @@ async def test_select_setup(hass: HomeAssistant, bypass_get_data) -> None:
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    # Check if any select entities exist
+    # Check that select entities exist
     select_entities = [
-        e for e in hass.states.async_entity_ids() if e.startswith("select.")
+        state
+        for state in hass.states.async_all()
+        if state.entity_id.startswith("select.")
     ]
 
-    # Skip test if no entities (platform may not be loading properly)
-    if not select_entities:
-        return
+    # We should have 2 select entities
+    assert len(select_entities) == 2
 
-    entity_registry = er.async_get(hass)
+    # All select entities should be from this integration
+    for select_entity in select_entities:
+        assert (
+            select_entity.attributes.get("attribution")
+            == "Data provided by Compool pool controller"
+        )
 
-    # Check pool heater mode select entity
-    pool_heater_entity = entity_registry.async_get(
-        f"{SELECT_DOMAIN}.pool_controller_pool_heater_mode"
-    )
-    assert pool_heater_entity is not None
-    assert pool_heater_entity.unique_id == f"{entry.entry_id}_pool_heater_mode"
+    # Check that we have pool and spa heater mode entities
+    entity_keys = []
+    for select_entity in select_entities:
+        if "pool_heater" in select_entity.entity_id:
+            entity_keys.append("pool_heater")
+        elif "spa_heater" in select_entity.entity_id:
+            entity_keys.append("spa_heater")
 
-    # Check spa heater mode select entity
-    spa_heater_entity = entity_registry.async_get(
-        f"{SELECT_DOMAIN}.pool_controller_spa_heater_mode"
-    )
-    assert spa_heater_entity is not None
-    assert spa_heater_entity.unique_id == f"{entry.entry_id}_spa_heater_mode"
+    assert len(entity_keys) == 2
+    assert "pool_heater" in entity_keys
+    assert "spa_heater" in entity_keys
 
 
 async def test_pool_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> None:
@@ -52,7 +55,13 @@ async def test_pool_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> N
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    state = hass.states.get(f"{SELECT_DOMAIN}.pool_controller_pool_heater_mode")
+    # Find pool heater mode entity
+    pool_entities = [
+        s
+        for s in hass.states.async_all()
+        if s.entity_id.startswith("select.") and "pool_heater" in s.entity_id
+    ]
+    state = pool_entities[0] if pool_entities else None
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
@@ -72,7 +81,13 @@ async def test_spa_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> No
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    state = hass.states.get(f"{SELECT_DOMAIN}.pool_controller_spa_heater_mode")
+    # Find spa heater mode entity
+    spa_entities = [
+        s
+        for s in hass.states.async_all()
+        if s.entity_id.startswith("select.") and "spa_heater" in s.entity_id
+    ]
+    state = spa_entities[0] if spa_entities else None
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
@@ -88,8 +103,13 @@ async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> Non
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    # Check if entity exists
-    state = hass.states.get(f"{SELECT_DOMAIN}.pool_controller_pool_heater_mode")
+    # Find pool heater mode entity
+    pool_entities = [
+        s
+        for s in hass.states.async_all()
+        if s.entity_id.startswith("select.") and "pool_heater" in s.entity_id
+    ]
+    state = pool_entities[0] if pool_entities else None
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
@@ -102,7 +122,7 @@ async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> Non
             SELECT_DOMAIN,
             "select_option",
             {
-                ATTR_ENTITY_ID: f"{SELECT_DOMAIN}.pool_controller_pool_heater_mode",
+                ATTR_ENTITY_ID: state.entity_id,
                 ATTR_OPTION: "solar-priority",
             },
             blocking=True,
@@ -119,8 +139,13 @@ async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    # Check if entity exists
-    state = hass.states.get(f"{SELECT_DOMAIN}.pool_controller_spa_heater_mode")
+    # Find spa heater mode entity
+    spa_entities = [
+        s
+        for s in hass.states.async_all()
+        if s.entity_id.startswith("select.") and "spa_heater" in s.entity_id
+    ]
+    state = spa_entities[0] if spa_entities else None
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
@@ -133,7 +158,7 @@ async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None
             SELECT_DOMAIN,
             "select_option",
             {
-                ATTR_ENTITY_ID: f"{SELECT_DOMAIN}.pool_controller_spa_heater_mode",
+                ATTR_ENTITY_ID: state.entity_id,
                 ATTR_OPTION: "heater",
             },
             blocking=True,

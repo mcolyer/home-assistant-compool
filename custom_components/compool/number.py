@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.number import (
+    NumberEntity,
+    NumberEntityDescription,
+    NumberMode,
+)
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -16,6 +19,31 @@ from .entity import CompoolEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+COMPOOL_NUMBER_ENTITIES: tuple[NumberEntityDescription, ...] = (
+    NumberEntityDescription(
+        key="pool_target_temperature",
+        translation_key="pool_target_temperature",
+        native_min_value=TEMP_MIN_F,
+        native_max_value=TEMP_MAX_F,
+        native_step=1,
+        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        mode=NumberMode.SLIDER,
+        icon="mdi:thermometer",
+        name="Pool Target Temperature",
+    ),
+    NumberEntityDescription(
+        key="spa_target_temperature",
+        translation_key="spa_target_temperature",
+        native_min_value=TEMP_MIN_F,
+        native_max_value=TEMP_MAX_F,
+        native_step=1,
+        native_unit_of_measurement=UnitOfTemperature.FAHRENHEIT,
+        mode=NumberMode.SLIDER,
+        icon="mdi:thermometer",
+        name="Spa Target Temperature",
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -24,33 +52,35 @@ async def async_setup_entry(
 ) -> None:
     """Set up Compool number entities."""
     coordinator = config_entry.runtime_data.coordinator
+    device_name = "Pool Controller"
 
-    entities = [
-        CompoolPoolTargetTemperatureNumber(coordinator, config_entry),
-        CompoolSpaTargetTemperatureNumber(coordinator, config_entry),
-    ]
+    entities = []
+    for description in COMPOOL_NUMBER_ENTITIES:
+        if description.key == "pool_target_temperature":
+            entities.append(
+                CompoolPoolTargetTemperatureNumber(
+                    coordinator, description, device_name
+                )
+            )
+        elif description.key == "spa_target_temperature":
+            entities.append(
+                CompoolSpaTargetTemperatureNumber(coordinator, description, device_name)
+            )
+
     async_add_entities(entities)
 
 
 class CompoolPoolTargetTemperatureNumber(CompoolEntity, NumberEntity):
     """Pool target temperature number entity."""
 
-    _attr_name = "Pool Target Temperature"
-    _attr_native_min_value = TEMP_MIN_F
-    _attr_native_max_value = TEMP_MAX_F
-    _attr_native_step = 1
-    _attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
-    _attr_mode = NumberMode.SLIDER
-    _attr_icon = "mdi:thermometer"
-
     def __init__(
         self,
         coordinator: CompoolStatusDataUpdateCoordinator,
-        config_entry: ConfigEntry,
+        description: NumberEntityDescription,
+        device_name: str,
     ) -> None:
         """Initialize the pool target temperature number."""
-        super().__init__(coordinator, config_entry)
-        self._attr_unique_id = f"{config_entry.entry_id}_pool_target_temperature"
+        super().__init__(coordinator, description, device_name)
 
     @property
     def native_value(self) -> float | None:
@@ -73,22 +103,14 @@ class CompoolPoolTargetTemperatureNumber(CompoolEntity, NumberEntity):
 class CompoolSpaTargetTemperatureNumber(CompoolEntity, NumberEntity):
     """Spa target temperature number entity."""
 
-    _attr_name = "Spa Target Temperature"
-    _attr_native_min_value = TEMP_MIN_F
-    _attr_native_max_value = TEMP_MAX_F
-    _attr_native_step = 1
-    _attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
-    _attr_mode = NumberMode.SLIDER
-    _attr_icon = "mdi:thermometer"
-
     def __init__(
         self,
         coordinator: CompoolStatusDataUpdateCoordinator,
-        config_entry: ConfigEntry,
+        description: NumberEntityDescription,
+        device_name: str,
     ) -> None:
         """Initialize the spa target temperature number."""
-        super().__init__(coordinator, config_entry)
-        self._attr_unique_id = f"{config_entry.entry_id}_spa_target_temperature"
+        super().__init__(coordinator, description, device_name)
 
     @property
     def native_value(self) -> float | None:

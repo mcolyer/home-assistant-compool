@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -15,6 +14,23 @@ from .entity import CompoolEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+COMPOOL_SELECT_ENTITIES: tuple[SelectEntityDescription, ...] = (
+    SelectEntityDescription(
+        key="pool_heater_mode",
+        translation_key="pool_heater_mode",
+        options=HEATER_MODES,
+        icon="mdi:fire",
+        name="Pool Heater Mode",
+    ),
+    SelectEntityDescription(
+        key="spa_heater_mode",
+        translation_key="spa_heater_mode",
+        options=HEATER_MODES,
+        icon="mdi:fire",
+        name="Spa Heater Mode",
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -23,11 +39,18 @@ async def async_setup_entry(
 ) -> None:
     """Set up Compool select entities."""
     coordinator = config_entry.runtime_data.coordinator
+    device_name = "Pool Controller"
 
-    entities = [
-        CompoolPoolHeaterModeSelect(coordinator, config_entry),
-        CompoolSpaHeaterModeSelect(coordinator, config_entry),
-    ]
+    entities = []
+    for description in COMPOOL_SELECT_ENTITIES:
+        if description.key == "pool_heater_mode":
+            entities.append(
+                CompoolPoolHeaterModeSelect(coordinator, description, device_name)
+            )
+        elif description.key == "spa_heater_mode":
+            entities.append(
+                CompoolSpaHeaterModeSelect(coordinator, description, device_name)
+            )
 
     async_add_entities(entities)
 
@@ -35,18 +58,14 @@ async def async_setup_entry(
 class CompoolPoolHeaterModeSelect(CompoolEntity, SelectEntity):
     """Pool heater mode select entity."""
 
-    _attr_name = "Pool Heater Mode"
-    _attr_options = HEATER_MODES
-    _attr_icon = "mdi:fire"
-
     def __init__(
         self,
         coordinator: CompoolStatusDataUpdateCoordinator,
-        config_entry: ConfigEntry,
+        description: SelectEntityDescription,
+        device_name: str,
     ) -> None:
         """Initialize the pool heater mode select."""
-        super().__init__(coordinator, config_entry)
-        self._attr_unique_id = f"{config_entry.entry_id}_pool_heater_mode"
+        super().__init__(coordinator, description, device_name)
 
     @property
     def current_option(self) -> str | None:
@@ -87,18 +106,14 @@ class CompoolPoolHeaterModeSelect(CompoolEntity, SelectEntity):
 class CompoolSpaHeaterModeSelect(CompoolEntity, SelectEntity):
     """Spa heater mode select entity."""
 
-    _attr_name = "Spa Heater Mode"
-    _attr_options = HEATER_MODES
-    _attr_icon = "mdi:fire"
-
     def __init__(
         self,
         coordinator: CompoolStatusDataUpdateCoordinator,
-        config_entry: ConfigEntry,
+        description: SelectEntityDescription,
+        device_name: str,
     ) -> None:
         """Initialize the spa heater mode select."""
-        super().__init__(coordinator, config_entry)
-        self._attr_unique_id = f"{config_entry.entry_id}_spa_heater_mode"
+        super().__init__(coordinator, description, device_name)
 
     @property
     def current_option(self) -> str | None:

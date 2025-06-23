@@ -1,0 +1,33 @@
+version = 1
+
+[install]
+python313.pkg-path = "python313"
+bash.pkg-path = "bash"
+uv.pkg-path = "uv"
+pkg-config.pkg-path = "pkg-config"
+gcc.pkg-path = "gcc"
+
+[vars]
+PYTHONPATH = "./custom_components"
+UV_PYTHON = "3.13.3"
+
+[hook]
+on-activate = '''
+echo "🏊 Home Assistant Compool Integration Environment"
+echo "Python: $(python --version)"
+echo "uv: $(uv --version)"
+
+if [ ! -d ".venv" ]; then
+  echo "Setting up Python environment..."
+  uv venv --python 3.13.3
+  uv pip install -e ".[dev]"
+fi
+
+source .venv/bin/activate
+
+echo "Available commands:"
+echo "  scripts/setup   - Set up development environment"
+echo "  scripts/develop - Start Home Assistant in debug mode"
+echo "  scripts/lint    - Format and lint code"
+echo "  scripts/test    - Run test suite"
+'''

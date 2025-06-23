@@ -6,13 +6,6 @@ bash.pkg-path = "bash"
 uv.pkg-path = "uv"
 pkg-config.pkg-path = "pkg-config"
 gcc.pkg-path = "gcc"
-# PIL/Pillow dependencies
-zlib.pkg-path = "zlib"
-libjpeg.pkg-path = "libjpeg"
-libpng.pkg-path = "libpng"
-freetype.pkg-path = "freetype"
-lcms2.pkg-path = "lcms2"
-openjpeg.pkg-path = "openjpeg"
 
 [vars]
 PYTHONPATH = "./.venv/lib/python3.13/site-packages:./custom_components"

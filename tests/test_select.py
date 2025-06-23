@@ -5,7 +5,6 @@ from unittest.mock import patch
 from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_OPTION
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from .const import MOCK_CONFIG_ENTRY
 
@@ -58,7 +57,8 @@ async def test_pool_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> N
 
     # Find pool heater mode entity
     pool_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("select.") and "pool_heater" in s.entity_id
     ]
     state = pool_entities[0] if pool_entities else None
@@ -83,7 +83,8 @@ async def test_spa_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> No
 
     # Find spa heater mode entity
     spa_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("select.") and "spa_heater" in s.entity_id
     ]
     state = spa_entities[0] if spa_entities else None
@@ -104,7 +105,8 @@ async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> Non
 
     # Find pool heater mode entity
     pool_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("select.") and "pool_heater" in s.entity_id
     ]
     state = pool_entities[0] if pool_entities else None
@@ -139,7 +141,8 @@ async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None
 
     # Find spa heater mode entity
     spa_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("select.") and "spa_heater" in s.entity_id
     ]
     state = spa_entities[0] if spa_entities else None

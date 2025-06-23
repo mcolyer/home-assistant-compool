@@ -5,7 +5,6 @@ from unittest.mock import patch
 from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from .const import MOCK_CONFIG_ENTRY
 
@@ -60,7 +59,8 @@ async def test_pool_target_temperature_value(
 
     # Find pool target temperature entity
     pool_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("number.") and "pool_target" in s.entity_id
     ]
     state = pool_entities[0] if pool_entities else None
@@ -83,7 +83,8 @@ async def test_spa_target_temperature_value(
 
     # Find spa target temperature entity
     spa_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("number.") and "spa_target" in s.entity_id
     ]
     state = spa_entities[0] if spa_entities else None
@@ -106,7 +107,8 @@ async def test_set_pool_target_temperature(
 
     # Find pool target temperature entity
     pool_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("number.") and "pool_target" in s.entity_id
     ]
     state = pool_entities[0] if pool_entities else None
@@ -141,7 +143,8 @@ async def test_set_spa_target_temperature(hass: HomeAssistant, bypass_get_data) 
 
     # Find spa target temperature entity
     spa_entities = [
-        s for s in hass.states.async_all()
+        s
+        for s in hass.states.async_all()
         if s.entity_id.startswith("number.") and "spa_target" in s.entity_id
     ]
     state = spa_entities[0] if spa_entities else None
@@ -158,9 +161,9 @@ async def test_set_spa_target_temperature(hass: HomeAssistant, bypass_get_data) 
             "set_value",
             {
                 ATTR_ENTITY_ID: state.entity_id,
-                "value": 106.0,
+                "value": 102.0,
             },
             blocking=True,
         )
 
-        mock_set_temp.assert_called_once_with("106f")
+        mock_set_temp.assert_called_once_with("102f")

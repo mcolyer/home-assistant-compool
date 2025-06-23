@@ -6,6 +6,13 @@ bash.pkg-path = "bash"
 uv.pkg-path = "uv"
 pkg-config.pkg-path = "pkg-config"
 gcc.pkg-path = "gcc"
+# PIL/Pillow dependencies
+zlib.pkg-path = "zlib"
+libjpeg.pkg-path = "libjpeg"
+libpng.pkg-path = "libpng"
+freetype.pkg-path = "freetype"
+lcms2.pkg-path = "lcms2"
+openjpeg.pkg-path = "openjpeg"
 
 [vars]
 PYTHONPATH = "./custom_components"
@@ -21,6 +28,13 @@ if [ ! -d ".venv" ]; then
   echo "Setting up Python environment..."
   uv venv --python 3.13.3
   uv pip install -e ".[dev]"
+else
+  # Check if PIL is working, if not reinstall it
+  if ! python -c "from PIL import Image, ImageOps" 2>/dev/null; then
+    echo "Reinstalling PIL/Pillow with proper dependencies..."
+    uv pip uninstall pillow || true
+    uv pip install --no-binary pillow pillow
+  fi
 fi
 
 source .venv/bin/activate

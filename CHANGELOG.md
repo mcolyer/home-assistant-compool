@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-06-23
+
 ### Added
 - **Pool Temperature Control** - Three new services for controlling pool and spa temperatures
   - `compool.set_pool_temperature` - Set pool target temperature with numeric value + unit (°F/°C)

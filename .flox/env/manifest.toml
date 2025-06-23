@@ -8,7 +8,7 @@ pkg-config.pkg-path = "pkg-config"
 gcc.pkg-path = "gcc"
 
 [vars]
-PYTHONPATH = "./.venv/lib/python3.13/site-packages:./custom_components"
+PYTHONPATH = "./custom_components"
 UV_PYTHON = "3.13.3"
 
 [hook]

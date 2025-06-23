@@ -5,6 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 # Set PYTHONPATH to prioritize venv packages over system packages
+# This is needed even with flox manifest PYTHONPATH because uv run doesn't inherit flox env vars
 export PYTHONPATH="./.venv/lib/python3.13/site-packages:./custom_components"
 
 # Run tests using uv run for better environment isolation

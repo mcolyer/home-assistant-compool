@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated pycompool from v0.1.2 to v0.2.1 with dependency management improvements
 - All existing functionality remains the same with enhanced stability
 
+## [0.2.1] - 2025-06-23
+
+### Fixed
+- Fix entity device name error that prevented proper device registration and entity organization
+
 ## [0.2.0] - 2025-06-23
 
 ### Added

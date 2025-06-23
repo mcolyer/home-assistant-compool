@@ -35,7 +35,7 @@ else
   # Check if PIL is working, if not reinstall it
   if ! python -c "from PIL import Image, ImageOps" 2>/dev/null; then
     echo "Reinstalling PIL/Pillow with proper dependencies..."
-    uv pip uninstall -y pillow || true
+    uv pip uninstall pillow || true
     uv pip install --no-binary pillow pillow
   fi
 fi

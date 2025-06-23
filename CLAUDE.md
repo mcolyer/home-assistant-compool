@@ -157,7 +157,9 @@ The integration includes a comprehensive test suite using pytest with Home Assis
 1. **Pre-release checklist**:
    - Run `scripts/test` to ensure all tests pass
    - Run `scripts/lint` to ensure code quality
-   - Commit any pending changes (like uv.lock dependency updates)
+   - Update `custom_components/compool/manifest.json` version field to match release version
+   - Update CHANGELOG.md to move [Unreleased] section to new version with current date
+   - Commit any pending changes (like uv.lock dependency updates, manifest, and CHANGELOG)
    
 2. **Git tagging**:
    - Create semantic version tag: `git tag v0.1.0`

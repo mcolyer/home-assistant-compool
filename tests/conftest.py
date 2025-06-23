@@ -31,17 +31,28 @@ def skip_notifications_fixture():
 def bypass_get_data_fixture():
     """Skip calls to get data from pool controller."""
 
-    # Create a mock PoolController class with all needed methods
-    mock_controller = MagicMock()
-    mock_controller.get_status.return_value = MOCK_POOL_STATUS
-    mock_controller.set_pool_temperature.return_value = True
-    mock_controller.set_spa_temperature.return_value = True
-    mock_controller.set_heater_mode.return_value = True
-    mock_controller.set_aux_equipment.return_value = True
-
-    with patch(
-        "custom_components.compool.coordinator.PoolController",
-        return_value=mock_controller,
+    with (
+        patch(
+            "custom_components.compool.coordinator.PoolController.get_status",
+            return_value=MOCK_POOL_STATUS,
+        ),
+        patch(
+            "custom_components.compool.coordinator.PoolController.set_pool_temperature",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.compool.coordinator.PoolController.set_spa_temperature",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.compool.coordinator.PoolController.set_heater_mode",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.compool.coordinator.PoolController.set_aux_equipment",
+            return_value=True,
+            create=True,
+        ),
     ):
         yield
 

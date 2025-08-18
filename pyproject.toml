@@ -17,7 +17,7 @@ dev = [
     "colorlog",
     "pytest-homeassistant-custom-component",
     "pytest-cov",
-    "ruff==0.12.0",
+    "ruff==0.12.9",
     "uv>0.4.15",
 ]
 

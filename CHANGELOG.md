@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-01-11
+
+### Changed
+- Upgrade pycompool dependency to v0.2.1 for improved reliability and bug fixes
+
+### Technical Details
+- Updated pycompool from v0.1.2 to v0.2.1 with dependency management improvements
+- All existing functionality remains the same with enhanced stability
+
 ## [0.2.0] - 2025-06-23
 
 ### Added

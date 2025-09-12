@@ -6,6 +6,6 @@
   "documentation": "https://github.com/mcolyer/pycompool",
   "iot_class": "local_polling",
   "loggers": ["pycompool"],
-  "requirements": ["pycompool==0.2.2"],
-  "version": "0.2.3"
+  "requirements": ["pycompool==0.2.3"],
+  "version": "0.2.4"
 }

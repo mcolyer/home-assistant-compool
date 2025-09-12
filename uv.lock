@@ -913,7 +913,7 @@ wheels = [
 
 [[package]]
 name = "home-assistant-compool"
-version = "0.2.3"
+version = "0.2.4"
 source = { editable = "." }
 dependencies = [
     { name = "async-timeout" },
@@ -935,7 +935,7 @@ requires-dist = [
     { name = "async-timeout", specifier = ">4.0.3" },
     { name = "colorlog", marker = "extra == 'dev'" },
     { name = "homeassistant", specifier = "==2025.9.1" },
-    { name = "pycompool", specifier = "==0.2.2" },
+    { name = "pycompool", specifier = "==0.2.3" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-homeassistant-custom-component", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.12" },
@@ -1502,15 +1502,15 @@ wheels = [
 
 [[package]]
 name = "pycompool"
-version = "0.2.2"
+version = "0.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fire" },
     { name = "pyserial" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b9/69/70db3368cd8f9cb7158d2344442bd05dba14978dfa3f32c7790e23b27114/pycompool-0.2.2.tar.gz", hash = "sha256:49418c0692af63a46ecc04faa88b5c89dce29fb5a7f10de951f4157cf01c5bf1", size = 25096, upload-time = "2025-09-12T12:45:30.017Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/d1/f9dcb86e45a45aada9ce389ce246f02ae08c1643c0ea0d8a523e4dc3b61e/pycompool-0.2.3.tar.gz", hash = "sha256:d925b17828f4e52c83e56e28f7664a2c4c212966dec85685432a09db6de63936", size = 25424, upload-time = "2025-09-12T21:19:02.739Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/5e/57bd79e6d627b5c363b9f781438558242e951fa3e0bf1c424d6bc4a0f4c6/pycompool-0.2.2-py3-none-any.whl", hash = "sha256:c1234d0815e35be3f8afea0c3bf2789ac648ed5bb5dc8aa623ba234964e97a5a", size = 16274, upload-time = "2025-09-12T12:45:28.91Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/c2/379845ba89cb86cb996628799ea3d47920a091486303a328f12876a9ccd9/pycompool-0.2.3-py3-none-any.whl", hash = "sha256:2b87f8a6b72d5c4a2d526d307c65031ee00051c07f51c204b6c4a9a4d396c88a", size = 16515, upload-time = "2025-09-12T21:19:01.61Z" },
 ]
 
 [[package]]

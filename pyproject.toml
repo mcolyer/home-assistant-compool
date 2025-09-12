@@ -1,6 +1,6 @@
 [project]
 name = "home-assistant-compool"
-version = "0.2.3"
+version = "0.2.4"
 description = "Home Assistant integration for Compool pool controllers"
 authors = [
     {name = "Matt Colyer", email = "matt@colyer.name"}
@@ -9,7 +9,7 @@ requires-python = ">= 3.13.2"
 dependencies = [
     "async-timeout>4.0.3",
     "homeassistant==2025.9.1",
-    "pycompool==0.2.2",
+    "pycompool==0.2.3",
 ]
 
 [project.optional-dependencies]

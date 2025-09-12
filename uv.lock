@@ -924,7 +924,7 @@ requires-dist = [
     { name = "async-timeout", specifier = ">4.0.3" },
     { name = "colorlog", marker = "extra == 'dev'" },
     { name = "homeassistant", specifier = "==2025.6.1" },
-    { name = "pycompool", specifier = "==0.1.2" },
+    { name = "pycompool", specifier = "==0.2.1" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pytest-homeassistant-custom-component", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.12.0" },
@@ -1459,15 +1459,15 @@ wheels = [
 
 [[package]]
 name = "pycompool"
-version = "0.1.2"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fire" },
     { name = "pyserial" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/36/aa/897cc995c2356def6f222ec80df1de1f07834b98b804128ad4a55a255170/pycompool-0.1.2.tar.gz", hash = "sha256:6390c5ff70a4ac74e736e8ad7acafd27bd05f8d2a639929b68b3f0595f273623", size = 21302, upload-time = "2025-06-18T12:19:07.621Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/f6/7603cb62535dac8f3ad69649d4cd742c6aa59a5b079d3a00431c9932f197/pycompool-0.2.1.tar.gz", hash = "sha256:75f85bfcc1cba7ee68dd265bb59add817d7465c208d5eba777c20fc95ac103d8", size = 24622, upload-time = "2025-09-12T03:47:35.195Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/95/de/602cf0c881588597c382dd5320814bdf3149e442fd59eae9d69876f88ffe/pycompool-0.1.2-py3-none-any.whl", hash = "sha256:f77440e3499a3cf6c2215822dd73cb78a1c6fa984e9eeda4d80fbf7e3b715cd4", size = 14675, upload-time = "2025-06-18T12:19:06.138Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/a3/ea612a2ccf7a2620a2f84c370edce4bdfffc2669c3c66b0401f28f199445/pycompool-0.2.1-py3-none-any.whl", hash = "sha256:ca531cdb654a56d488b0807b2be329bb5e9f86c554dac1dc16bc50baf73a1c06", size = 16046, upload-time = "2025-09-12T03:47:33.549Z" },
 ]
 
 [[package]]

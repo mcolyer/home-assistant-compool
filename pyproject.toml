@@ -1,6 +1,6 @@
 [project]
 name = "home-assistant-compool"
-version = "0.2.2"
+version = "0.2.3"
 description = "Home Assistant integration for Compool pool controllers"
 authors = [
     {name = "Matt Colyer", email = "matt@colyer.name"}

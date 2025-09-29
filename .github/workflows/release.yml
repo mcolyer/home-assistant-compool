@@ -5,25 +5,35 @@ on:
     types:
       - "published"
 
-permissions: {}
+permissions:
+  contents: write
 
 jobs:
   release:
     name: "Release"
     runs-on: "ubuntu-latest"
-    permissions:
-      contents: write
     steps:
       - name: "Checkout the repository"
         uses: "actions/checkout@v5"
 
-      - name: "ZIP the integration directory"
+      - name: "Verify release tag matches manifest version"
         shell: "bash"
         run: |
-          cd "${{ github.workspace }}/custom_components/compool"
-          zip compool.zip -r ./
+          MANIFEST_VERSION=$(grep '"version"' custom_components/compool/manifest.json | sed 's/.*"version": "\(.*\)".*/\1/')
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: manifest.json version ($MANIFEST_VERSION) does not match tag version ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✓ Version check passed: $MANIFEST_VERSION"
 
-      - name: "Upload the ZIP file to the release"
+      - name: "Create integration ZIP"
+        shell: "bash"
+        run: |
+          cd custom_components/compool
+          zip -r compool.zip . -x "*.pyc" -x "__pycache__/*" -x "*.egg-info/*"
+
+      - name: "Upload ZIP to release"
         uses: softprops/action-gh-release@v2.3.3
         with:
-          files: ${{ github.workspace }}/custom_components/compool/compool.zip
+          files: custom_components/compool/compool.zip

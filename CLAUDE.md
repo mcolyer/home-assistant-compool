@@ -45,8 +45,14 @@ The integration utilizes pycompool APIs:
 - ✅ Connection management - Automatic connect/disconnect for each status query
 
 ### Important API Data Structure Notes
-- **Firmware Version**: pycompool returns `"version"` key (integer), not `"firmware"` 
-- **Active Heat Source**: No direct field - must be computed from `heater_on` and `solar_on` boolean status
+- **Firmware Version**: pycompool returns `"version"` key (integer), not `"firmware"`
+- **Heat Source Configuration**:
+  - `heat_source`: Pool heat mode configuration (`'heater'`, `'solar-priority'`, `'solar-only'`, or `'off'`)
+  - `spa_heat_source`: Spa heat mode configuration (`'heater'`, `'solar-priority'`, `'solar-only'`, or `'off'`)
+  - These fields indicate the *configured* heating mode, not the current active state
+- **Heater Active Status**:
+  - `heater_on`: Boolean indicating whether the heater is *actively running* right now
+  - This is separate from the configured heat mode
 - **Temperature Keys**: Follow specific naming conventions (e.g., `air_temp_f`, `pool_solar_temp_f`, `spa_solar_temp` without _f suffix)
 - **Time Format**: Returns as "HH:MM" string format, not ISO timestamp
 - **Status Fields**: Include `heater_on`, `solar_on`, `freeze_protection_active`, sensor fault flags
@@ -63,9 +69,11 @@ The integration utilizes pycompool APIs:
 **Status Sensors:**
 - `sensor.pool_controller_firmware` - Controller firmware version
 - `sensor.pool_controller_time` - Controller timestamp
-- `sensor.pool_active_heat_source` - Currently active heating source
+- `sensor.pool_heat_source` - Pool heating mode configuration (heater/solar-priority/solar-only/off)
+- `sensor.spa_heat_source` - Spa heating mode configuration (heater/solar-priority/solar-only/off)
 
 **Binary Sensors:**
+- `binary_sensor.heater_on` - Whether heater is actively running (separate from configured mode)
 - `binary_sensor.heat_delay_active` - Heat delay status
 - `binary_sensor.freeze_protection_active` - Freeze protection status
 - `binary_sensor.air_sensor_fault` - Air sensor fault indicator
@@ -159,19 +167,19 @@ The integration includes a comprehensive test suite using pytest with Home Assis
 
 ### Common Sensor Problems
 - **"Unknown" Values**: Usually indicates incorrect data key mapping between pycompool API and const.py
-- **Missing Fields**: Some sensor values need to be computed from other status fields (e.g., active_heat_source)
+- **Missing Fields**: Verify that pycompool status includes the expected field
 - **Temperature Mapping**: Ensure temperature sensor keys match pycompool's exact field names
 
 ### Debugging Steps
 1. **Check pycompool API docs** for actual field names and data structure
 2. **Verify const.py mappings** - ensure KEY_* constants match pycompool field names exactly
-3. **Add computed fields** in coordinator's `_enhance_status_data()` method for derived values
-4. **Update test mock data** to match real pycompool response format
-5. **Use `uv run python -c "..."` for testing** - never use `python3` directly
+3. **Update test mock data** to match real pycompool response format
+4. **Use `uv run python -c "..."` for testing** - never use `python3` directly
 
 ### Key API Differences to Watch For
 - pycompool uses `"version"` not `"firmware"` for firmware version
-- Active heat source must be computed from `heater_on`/`solar_on` booleans
+- `heat_source` and `spa_heat_source` are configured modes, not active status
+- `heater_on` is a boolean showing active heater status, separate from configured mode
 - Temperature field naming is inconsistent (some have _f suffix, some don't)
 - Time is "HH:MM" format, not ISO timestamps
 

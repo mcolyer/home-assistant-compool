@@ -37,7 +37,13 @@ KEY_SPA_WATER_TEMP = "spa_water_temp_f"
 KEY_SPA_SOLAR_TEMP = "spa_solar_temp"  # Note: no _f suffix in pycompool
 KEY_POOL_AIR_TEMP = "air_temp_f"
 KEY_SOLAR_COLLECTOR_TEMP = "pool_solar_temp_f"  # This is the solar collector temp
-KEY_ACTIVE_HEAT_SOURCE = "active_heat_source"  # Will be computed from heat source bits
+KEY_HEAT_SOURCE = (
+    "heat_source"  # Pool heat mode: 'heater', 'solar-priority', 'solar-only', 'off'
+)
+KEY_SPA_HEAT_SOURCE = (
+    "spa_heat_source"  # Spa heat mode: 'heater', 'solar-priority', 'solar-only', 'off'
+)
+KEY_HEATER_ON = "heater_on"  # Boolean: whether heater is actively running
 KEY_HEAT_DELAY_ACTIVE = "heat_delay_active"
 KEY_FREEZE_PROTECTION_ACTIVE = "freeze_protection_active"
 KEY_AIR_SENSOR_FAULT = "air_sensor_fault"

@@ -15,6 +15,7 @@ from .const import (
     KEY_AIR_SENSOR_FAULT,
     KEY_FREEZE_PROTECTION_ACTIVE,
     KEY_HEAT_DELAY_ACTIVE,
+    KEY_HEATER_ON,
     KEY_SOLAR_PRESENT,
     KEY_SOLAR_SENSOR_FAULT,
     KEY_WATER_SENSOR_FAULT,
@@ -23,6 +24,12 @@ from .coordinator import CompoolConfigEntry
 from .entity import CompoolEntity
 
 COMPOOL_BINARY_SENSORS: tuple[BinarySensorEntityDescription, ...] = (
+    BinarySensorEntityDescription(
+        key="heater_on",
+        translation_key="heater_on",
+        icon="mdi:radiator",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     BinarySensorEntityDescription(
         key="heat_delay_active",
         translation_key="heat_delay_active",
@@ -102,7 +109,9 @@ class CompoolBinarySensor(CompoolEntity, BinarySensorEntity):
         sensor_key = self.entity_description.key
         status = self.coordinator.data
 
-        if sensor_key == "heat_delay_active":
+        if sensor_key == "heater_on":
+            return status.get(KEY_HEATER_ON, False)
+        elif sensor_key == "heat_delay_active":
             return status.get(KEY_HEAT_DELAY_ACTIVE, False)
         elif sensor_key == "freeze_protection_active":
             return status.get(KEY_FREEZE_PROTECTION_ACTIVE, False)

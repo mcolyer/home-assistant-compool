@@ -24,8 +24,8 @@ async def test_sensors(hass: HomeAssistant) -> None:
         if state.entity_id.startswith("sensor.")
     ]
 
-    # We should have 8 sensors
-    assert len(sensors) == 8
+    # We should have 9 sensors (added spa_heat_source)
+    assert len(sensors) == 9
 
     # All sensors should be from this integration - entity IDs now use device name + translation key
     for sensor in sensors:

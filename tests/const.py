@@ -18,11 +18,10 @@ MOCK_POOL_STATUS = {
     "pool_solar_temp_f": 95.3,  # This is the solar collector temp
     "desired_pool_temp_f": 80.0,  # Target pool temperature
     "desired_spa_temp_f": 104.0,  # Target spa temperature
-    "heater_on": True,
+    "heat_source": "heater",  # Pool heat mode configuration
+    "spa_heat_source": "solar-priority",  # Spa heat mode configuration
+    "heater_on": True,  # Boolean: heater actively running
     "solar_on": False,
-    "spa_heater_on": False,  # For spa heater mode select
-    "spa_solar_on": False,  # For spa heater mode select
-    "active_heat_source": "heater",  # Will be computed by coordinator
     "heat_delay_active": False,
     "freeze_protection_active": False,
     "air_sensor_fault": False,

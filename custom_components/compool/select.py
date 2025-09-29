@@ -73,25 +73,8 @@ class CompoolPoolHeaterModeSelect(CompoolEntity, SelectEntity):
         if self.coordinator.data is None:
             return None
 
-        # Extract heat source configuration from status data
-        # This would need to be added to the coordinator's _enhance_status_data method
-        # For now, we'll determine from the boolean flags
-        status = self.coordinator.data
-
-        # Check if pool heater/solar are on to determine current mode
-        heater_on = status.get("heater_on", False)
-        solar_on = status.get("solar_on", False)
-
-        if not heater_on and not solar_on:
-            return "off"
-        elif heater_on and solar_on:
-            return "solar-priority"  # Both are active
-        elif heater_on:
-            return "heater"
-        elif solar_on:
-            return "solar-only"
-        else:
-            return "off"
+        # Read heat source configuration directly from status data
+        return self.coordinator.data.get("heat_source")
 
     async def async_select_option(self, option: str) -> None:
         """Set pool heater mode."""
@@ -121,26 +104,8 @@ class CompoolSpaHeaterModeSelect(CompoolEntity, SelectEntity):
         if self.coordinator.data is None:
             return None
 
-        # Extract spa heat source configuration from status data
-        # This would need to be enhanced based on the actual pycompool data structure
-        # For 3830 systems, spa heater and solar status are in separate bits
-        status = self.coordinator.data
-
-        # Check spa-specific heater/solar status (for 3830 systems)
-        # These fields may need to be added to the coordinator's data parsing
-        spa_heater_on = status.get("spa_heater_on", False)
-        spa_solar_on = status.get("spa_solar_on", False)
-
-        if not spa_heater_on and not spa_solar_on:
-            return "off"
-        elif spa_heater_on and spa_solar_on:
-            return "solar-priority"  # Both are active
-        elif spa_heater_on:
-            return "heater"
-        elif spa_solar_on:
-            return "solar-only"
-        else:
-            return "off"
+        # Read spa heat source configuration directly from status data
+        return self.coordinator.data.get("spa_heat_source")
 
     async def async_select_option(self, option: str) -> None:
         """Set spa heater mode."""

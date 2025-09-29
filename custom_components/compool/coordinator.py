@@ -69,21 +69,6 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Raise UpdateFailed for no status data."""
         raise UpdateFailed("No status data received from pool controller")
 
-    def _enhance_status_data(self, status: dict[str, Any]) -> None:
-        """Add computed fields to status data."""
-        # Compute active heat source based on current heating activity
-        # According to pycompool docs, we can determine active heat source from heater_on and solar_on
-        if status.get("heater_on") and status.get("solar_on"):
-            active_heat_source = "heater+solar"
-        elif status.get("heater_on"):
-            active_heat_source = "heater"
-        elif status.get("solar_on"):
-            active_heat_source = "solar"
-        else:
-            active_heat_source = "off"
-
-        status["active_heat_source"] = active_heat_source
-
     def _get_pool_status_with_retry(self) -> dict[str, Any]:
         """Get pool controller status with retry logic for connection failures."""
         max_retries = 5
@@ -102,8 +87,6 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if not status:
                     self._raise_no_status_error()
                 else:
-                    # Enhance status with computed fields
-                    self._enhance_status_data(status)
                     return status
 
             except Exception as ex:

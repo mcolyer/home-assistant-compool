@@ -13,11 +13,12 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
 from .const import (
-    KEY_ACTIVE_HEAT_SOURCE,
     KEY_FIRMWARE,
+    KEY_HEAT_SOURCE,
     KEY_POOL_AIR_TEMP,
     KEY_POOL_WATER_TEMP,
     KEY_SOLAR_COLLECTOR_TEMP,
+    KEY_SPA_HEAT_SOURCE,
     KEY_SPA_SOLAR_TEMP,
     KEY_SPA_WATER_TEMP,
     KEY_TIME,
@@ -37,8 +38,13 @@ COMPOOL_SENSORS: tuple[SensorEntityDescription, ...] = (
         icon="mdi:clock",
     ),
     SensorEntityDescription(
-        key="pool_active_heat_source",
-        translation_key="pool_active_heat_source",
+        key="pool_heat_source",
+        translation_key="pool_heat_source",
+        icon="mdi:fire",
+    ),
+    SensorEntityDescription(
+        key="spa_heat_source",
+        translation_key="spa_heat_source",
         icon="mdi:fire",
     ),
     SensorEntityDescription(
@@ -126,8 +132,10 @@ class CompoolSensor(CompoolEntity, SensorEntity):
             return status.get(KEY_FIRMWARE)
         elif sensor_key == "pool_controller_time":
             return status.get(KEY_TIME)
-        elif sensor_key == "pool_active_heat_source":
-            return status.get(KEY_ACTIVE_HEAT_SOURCE)
+        elif sensor_key == "pool_heat_source":
+            return status.get(KEY_HEAT_SOURCE)
+        elif sensor_key == "spa_heat_source":
+            return status.get(KEY_SPA_HEAT_SOURCE)
         elif sensor_key == "pool_water_temperature":
             return status.get(KEY_POOL_WATER_TEMP)
         elif sensor_key == "spa_water_temperature":

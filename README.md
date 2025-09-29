@@ -26,8 +26,10 @@ A comprehensive Home Assistant integration for Compool pool controllers. Monitor
 - **Precise Readings**: Temperature readings in Fahrenheit with 1°F precision
 
 ### 🔧 **Equipment Status & Control**
-- **Heat Source Monitoring**: Track active heating source (solar, heater, etc.)
-- **System Status**: Monitor heat delay and freeze protection states
+- **Heater Mode Control**: Configure heating mode for pool and spa (heater/solar-priority/solar-only/off)
+- **Temperature Control**: Set target temperatures for pool and spa (50-104°F)
+- **Auxiliary Equipment**: Control up to 8 auxiliary circuits (pumps, lights, etc.)
+- **System Status**: Monitor heat delay, freeze protection, and active heater status
 - **Fault Detection**: Sensor fault indicators for air, solar, and water sensors
 - **Solar System**: Solar presence detection and status monitoring
 - **Firmware Info**: Controller firmware version and time display
@@ -92,11 +94,13 @@ The integration creates the following sensors for your pool controller:
 |--------|-------------|--------------|
 | **Firmware** | Controller firmware version | - |
 | **Controller Time** | Controller system time | Timestamp |
-| **Active Heat Source** | Currently active heating source | - |
+| **Pool Heat Source** | Pool heating mode configuration | - |
+| **Spa Heat Source** | Spa heating mode configuration | - |
 
 ### Binary Sensors
 | Sensor | Description | Device Class |
 |--------|-------------|--------------|
+| **Heater On** | Whether heater is actively running | - |
 | **Heat Delay Active** | Heat delay status indicator | - |
 | **Freeze Protection Active** | Freeze protection status | - |
 | **Air Sensor Fault** | Air sensor fault indicator | Problem |
@@ -104,9 +108,45 @@ The integration creates the following sensors for your pool controller:
 | **Water Sensor Fault** | Water sensor fault indicator | Problem |
 | **Solar Present** | Solar system presence indicator | - |
 
+### Control Entities
+| Entity | Description | Range/Options |
+|--------|-------------|---------------|
+| **Pool Target Temperature** | Set pool target temperature | 50-104°F |
+| **Spa Target Temperature** | Set spa target temperature | 50-104°F |
+| **Pool Heater Mode** | Configure pool heating mode | off, heater, solar-priority, solar-only |
+| **Spa Heater Mode** | Configure spa heating mode | off, heater, solar-priority, solar-only |
+| **Aux 1-8 Switches** | Control auxiliary equipment | on/off |
+
 ## 🔧 Services
 
-Currently, no additional services are implemented. All pool controller data is available through the sensor entities listed above. Future versions may include services for pool control functions.
+The integration provides the following services for pool control:
+
+### `compool.set_pool_temperature`
+Set the target temperature for the pool.
+```yaml
+service: compool.set_pool_temperature
+data:
+  temperature: 80  # 50-104°F
+  unit: "f"  # Optional: "f" or "c" (default: "f")
+```
+
+### `compool.set_spa_temperature`
+Set the target temperature for the spa.
+```yaml
+service: compool.set_spa_temperature
+data:
+  temperature: 104  # 50-104°F
+  unit: "f"  # Optional: "f" or "c" (default: "f")
+```
+
+### `compool.set_heater_mode`
+Set the heater/solar mode for pool or spa.
+```yaml
+service: compool.set_heater_mode
+data:
+  mode: "solar-priority"  # off, heater, solar-priority, solar-only
+  target: "pool"  # pool or spa
+```
 
 ## 🚀 Automation Examples
 
@@ -172,7 +212,48 @@ automation:
             Pool Status:
             🌡️ Pool: {{ states('sensor.compool_pool_water_temperature') }}°F
             🛁 Spa: {{ states('sensor.compool_spa_water_temperature') }}°F
-            ☀️ Active Heat: {{ states('sensor.compool_pool_active_heat_source') }}
+            🔥 Pool Heat Mode: {{ states('sensor.compool_pool_heat_source') }}
+            💨 Heater Active: {{ states('binary_sensor.compool_heater_on') }}
+```
+
+### Automatic Pool Heating
+```yaml
+automation:
+  - alias: "Enable Pool Solar Heating"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.compool_pool_water_temperature
+        below: 78
+    condition:
+      - condition: time
+        after: "10:00:00"
+        before: "16:00:00"
+      - condition: state
+        entity_id: binary_sensor.compool_solar_present
+        state: "on"
+    action:
+      - service: compool.set_heater_mode
+        data:
+          mode: "solar-priority"
+          target: "pool"
+```
+
+### Spa Preparation
+```yaml
+automation:
+  - alias: "Prepare Spa for Evening"
+    trigger:
+      - platform: time
+        at: "18:00:00"
+    action:
+      - service: compool.set_spa_temperature
+        data:
+          temperature: 104
+          unit: "f"
+      - service: compool.set_heater_mode
+        data:
+          mode: "heater"
+          target: "spa"
 ```
 
 ## 🔄 Data Updates
@@ -186,9 +267,9 @@ The integration uses efficient local polling that provides real-time updates wit
 ## 🛠️ Development
 
 ### Requirements
-- Python 3.13+
+- Python 3.13.2+
 - Home Assistant 2025.6.0+
-- pycompool v0.1.2 library
+- pycompool v0.2.3 library
 
 ### Setup Development Environment
 ```bash

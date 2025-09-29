@@ -24,8 +24,8 @@ async def test_binary_sensors(hass: HomeAssistant) -> None:
         if state.entity_id.startswith("binary_sensor.")
     ]
 
-    # We should have 6 binary sensors
-    assert len(binary_sensors) == 6
+    # We should have 7 binary sensors (added heater_on)
+    assert len(binary_sensors) == 7
 
     # All binary sensors should be from this integration - entity IDs now use device name + translation key
 

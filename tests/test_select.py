@@ -65,7 +65,7 @@ async def test_pool_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> N
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
-    # Based on MOCK_POOL_STATUS heater_on=True, solar_on=False
+    # Based on MOCK_POOL_STATUS heat_source="heater"
     assert state.state == "heater"
     assert "off" in state.attributes["options"]
     assert "heater" in state.attributes["options"]
@@ -91,8 +91,8 @@ async def test_spa_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> No
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
-    # Based on MOCK_POOL_STATUS spa_heater_on=False, spa_solar_on=False
-    assert state.state == "off"
+    # Based on MOCK_POOL_STATUS spa_heat_source="solar-priority"
+    assert state.state == "solar-priority"
 
 
 async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> None:

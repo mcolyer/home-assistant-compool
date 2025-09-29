@@ -14,8 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a Home Assistant custom component for Compool pool controllers. The integration is built on the integration_blueprint template structure:
 
 - **Domain**: `compool` (defined in const.py and manifest.json)
-- **Platforms**: Binary sensor and sensor platforms
-- **Communication**: Uses pycompool library for RS485 over TCP communication
+- **Platforms**: sensor, binary_sensor, number, select, switch
+- **Communication**: Uses pycompool library (v0.2.3) for RS485 over TCP communication
 - **Data Coordination**: CompoolStatusDataUpdateCoordinator handles local polling with 30-second intervals
 - **Configuration**: Config entry-based setup with IP address and port (default 8899)
 
@@ -25,8 +25,11 @@ This is a Home Assistant custom component for Compool pool controllers. The inte
 - `config_flow.py` - IP/port configuration flow with connection validation using get_status()
 - `entity.py` - Base entity class for Compool pool controller entities
 - `sensor.py` - Temperature and status sensors (firmware, time, temperatures, heat source)
-- `binary_sensor.py` - Pool status binary sensors (heat delay, freeze protection, sensor faults, solar presence)
-- `services.yaml` - Service definitions (currently none implemented)
+- `binary_sensor.py` - Pool status binary sensors (heater_on, heat delay, freeze protection, sensor faults, solar presence)
+- `number.py` - Target temperature controls for pool and spa
+- `select.py` - Heater mode selection for pool and spa
+- `switch.py` - Auxiliary equipment switches (8 aux circuits)
+- `services.yaml` - Service definitions (set_pool_temperature, set_spa_temperature, set_heater_mode)
 
 ## Data Model
 
@@ -81,33 +84,28 @@ The integration utilizes pycompool APIs:
 - `binary_sensor.water_sensor_fault` - Water sensor fault indicator
 - `binary_sensor.solar_present` - Solar system presence indicator
 
+**Number Entities:**
+- `number.pool_target_temperature` - Pool target temperature (50-104°F)
+- `number.spa_target_temperature` - Spa target temperature (50-104°F)
+
+**Select Entities:**
+- `select.pool_heater_mode` - Pool heater mode (off/heater/solar-priority/solar-only)
+- `select.spa_heater_mode` - Spa heater mode (off/heater/solar-priority/solar-only)
+
+**Switch Entities:**
+- `switch.aux1` through `switch.aux8` - Auxiliary equipment controls
+
+**Services:**
+- `compool.set_pool_temperature` - Set pool target temperature
+- `compool.set_spa_temperature` - Set spa target temperature
+- `compool.set_heater_mode` - Set heater mode for pool or spa
+
 ## Development Environment
 
-The integration includes both development container and flox environment setups:
-
-### Flox Environment (Optional)
-This project includes a flox environment configuration for developers who use flox for package and environment management:
-
-- **Manifest Location**: `.flox/env/manifest.toml` (not in project root)
-- **Python Version**: 3.13.3 via `python313` package
-- **Key Dependencies**: `bash`, `uv`, `pkg-config`, `gcc` for building Python packages
-- **Environment Variables**: 
-  - `PYTHONPATH="./.venv/lib/python3.13/site-packages:./custom_components"` 
-  - `UV_PYTHON="3.13.3"`
-
-#### Important Flox Considerations
-- **Multiple Environment Conflicts**: If your shell loads both default (`~/.flox`) and project-specific flox environments, Python path conflicts can occur
-- **Test Execution**: The `scripts/test` script explicitly sets `PYTHONPATH` to prioritize venv packages over system packages to avoid import conflicts
-- **PIL/Pillow Issues**: If PIL import errors occur, it's usually due to Python path ordering - the scripts handle this with explicit path management
-- **Script Compatibility**: All scripts use `uv run` for better environment isolation rather than manual venv activation
-
-#### Flox vs Standard Development
-- **With Flox**: Use `flox activate` to enter environment, then run `scripts/test`, `scripts/lint`
-- **Without Flox**: Use standard `python -m venv` and pip workflows
-- **Both Approaches**: Supported - the project works with or without flox
-
-### Development Container
-The integration also includes a development container setup with Home Assistant pre-configured. The `config/configuration.yaml` enables debug logging for the custom component.
+- **Python Version**: 3.13.2+ (required for Home Assistant 2025.6.0+)
+- **Package Manager**: uv for dependency management
+- **Development Container**: Available with Home Assistant pre-configured
+- **Flox Environment**: Optional (`.flox/env/manifest.toml`) - scripts use `uv run` for environment isolation
 
 ## Testing
 
@@ -121,67 +119,28 @@ The integration includes a comprehensive test suite using pytest with Home Assis
 
 ## Development Notes
 
-- **Coordinator Sharing**: Both sensor and binary_sensor platforms use the shared coordinator from `runtime_data` instead of creating new instances
+- **Coordinator Sharing**: All platforms use the shared coordinator from `runtime_data`
 - **Entity Naming**: Home Assistant generates entity IDs using device_class and translation keys
-- **Manifest Requirements**: HA 2025.6.0+ requires a "version" field in manifest.json  
-- **Python Version**: Uses Python 3.13.2 managed by uv for compatibility with latest HA versions (Home Assistant 2025.6.0 requires >=3.13.2)
-- **Polling Strategy**: Pool controller status updates every 30 seconds using brief TCP connections for real-time monitoring
-- **Local Communication**: Uses pycompool v0.1.2 for RS485 over TCP communication with pool controllers
+- **Polling Strategy**: Pool controller status updates every 30 seconds using brief TCP connections
 - **Connection Pattern**: Connect briefly, get status, disconnect automatically to minimize connection overhead
 
 ## CI/CD & Code Quality
 
-### GitHub Actions Workflows
-- **ci.yml**: Runs lint, test, and hassfest validation on code changes only (excludes documentation)
-- **release.yml**: Validates code quality on releases
-- **Path Filters**: Uses `paths:` to trigger CI only on relevant file changes (custom_components/, tests/, scripts/, config files)
-
-### Code Quality Tools
-- **Ruff**: Fast Python linter and formatter with Home Assistant specific rules
-- **Pre-commit**: Automated code quality checks before commits
-- **Hassfest**: Home Assistant integration validation tool
-- **Codecov**: Test coverage reporting and tracking
-
-### Important Requirements & Fixes
-- **Python Version Matching**: CI Python version must match pyproject.toml requirements (use 3.13.2, not 3.13)
-- **Manifest Key Ordering**: manifest.json requires specific key order: `domain`, `name`, then alphabetical
-- **Import Management**: Remove unused imports to pass linting (F401 errors)
-- **Exception Handling**: Use `else` clauses in try/except blocks instead of returns in try (TRY300)
-- **Raise Abstraction**: Extract raise statements to separate methods when flagged by TRY301
-- **Dependency Resolution**: Ensure pyproject.toml `requires-python` matches library requirements
-
-### Linting Best Practices
-- Run `uv run ruff check --fix .` to auto-fix most issues
-- Run `uv run ruff format .` for consistent formatting
-- Import organization: stdlib, third-party, local imports with proper spacing
-- Avoid unused variables and imports
-- Use proper exception handling patterns
-
-### Testing Strategy
-- Mock external dependencies (pycompool.PoolController) in conftest.py
-- Create realistic mock data that matches expected API responses
-- Test both happy path and error conditions
-- Use pytest fixtures for consistent test data
+- **CI**: Runs lint, test, and hassfest validation on code changes (excludes docs)
+- **Linting**: Ruff with Home Assistant specific rules - use `scripts/lint` to auto-fix
+- **Testing**: pytest with Home Assistant custom component framework - mock pycompool in conftest.py
+- **Coverage**: Codecov tracks test coverage
+- **Important**: CI Python version (3.13.2) must match pyproject.toml `requires-python`
 
 ## Debugging Sensor Issues
 
-### Common Sensor Problems
-- **"Unknown" Values**: Usually indicates incorrect data key mapping between pycompool API and const.py
-- **Missing Fields**: Verify that pycompool status includes the expected field
-- **Temperature Mapping**: Ensure temperature sensor keys match pycompool's exact field names
-
-### Debugging Steps
-1. **Check pycompool API docs** for actual field names and data structure
-2. **Verify const.py mappings** - ensure KEY_* constants match pycompool field names exactly
-3. **Update test mock data** to match real pycompool response format
-4. **Use `uv run python -c "..."` for testing** - never use `python3` directly
-
-### Key API Differences to Watch For
-- pycompool uses `"version"` not `"firmware"` for firmware version
-- `heat_source` and `spa_heat_source` are configured modes, not active status
-- `heater_on` is a boolean showing active heater status, separate from configured mode
-- Temperature field naming is inconsistent (some have _f suffix, some don't)
-- Time is "HH:MM" format, not ISO timestamps
+- **"Unknown" Values**: Check const.py KEY_* constants match pycompool field names exactly
+- **Field Name Quirks**:
+  - pycompool uses `"version"` not `"firmware"` for firmware version
+  - `heat_source`/`spa_heat_source` are configured modes (strings), `heater_on` is active status (boolean)
+  - Temperature fields: inconsistent _f suffix (e.g., `air_temp_f` but `spa_solar_temp`)
+  - Time format: "HH:MM" string, not ISO timestamp
+- **Testing**: Use `uv run python -c "..."` for testing pycompool API directly
 
 ## Release Process
 

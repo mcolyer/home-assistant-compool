@@ -34,6 +34,6 @@ jobs:
           zip -r compool.zip . -x "*.pyc" -x "__pycache__/*" -x "*.egg-info/*"
 
       - name: "Upload ZIP to release"
-        uses: softprops/action-gh-release@v2.3.3
+        uses: softprops/action-gh-release@v2.3.4
         with:
           files: custom_components/compool/compool.zip

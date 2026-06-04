@@ -148,3 +148,6 @@ Thumbs.db
 secrets.yaml
 known_devices.yaml
 ip_bans.yaml
+
+# Claude Code local settings
+.claude/settings.local.json

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-04
+
 ### Fixed
 - Fix pool/spa heater mode selects and heat source sensors showing "unknown" by mapping pycompool's integer heat-source codes (0-3) to mode strings in the coordinator
 

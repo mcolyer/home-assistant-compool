@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-04
+
+### Fixed
+- Fix rapid successive changes (temperature, heater mode, aux switches) getting lost or snapping back by serializing all controller access behind a bus lock, applying optimistic state updates, and removing the stale immediate re-poll after each write
+- Coalesce rapid same-field writes (e.g. temperature slider drags) behind a short debounce so only the final value is sent to the controller instead of flooding the RS485 bus
+
 ## [0.4.0] - 2026-06-04
 
 ### Fixed

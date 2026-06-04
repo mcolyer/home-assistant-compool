@@ -6,7 +6,7 @@ from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_OPTION
 from homeassistant.core import HomeAssistant
 
-from .const import MOCK_CONFIG_ENTRY
+from .const import MOCK_CONFIG_ENTRY, flush_writes
 
 
 async def test_select_setup(hass: HomeAssistant, bypass_get_data) -> None:
@@ -127,6 +127,7 @@ async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> Non
             },
             blocking=True,
         )
+        await flush_writes(hass)
 
         mock_set_mode.assert_called_once_with("solar-priority", "pool")
 
@@ -163,5 +164,6 @@ async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None
             },
             blocking=True,
         )
+        await flush_writes(hass)
 
         mock_set_mode.assert_called_once_with("heater", "spa")

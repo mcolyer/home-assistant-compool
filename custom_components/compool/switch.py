@@ -122,21 +122,13 @@ class CompoolSwitch(CompoolEntity, SwitchEntity):
         """Turn the switch on."""
         switch_key = self.entity_description.key
         aux_num = int(switch_key.replace("aux", ""))
-
-        success = await self.coordinator.async_set_aux_equipment(aux_num, True)
-        if success:
-            # Request immediate coordinator refresh to update state
-            await self.coordinator.async_request_refresh()
+        await self.coordinator.async_set_aux_equipment(aux_num, True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         switch_key = self.entity_description.key
         aux_num = int(switch_key.replace("aux", ""))
-
-        success = await self.coordinator.async_set_aux_equipment(aux_num, False)
-        if success:
-            # Request immediate coordinator refresh to update state
-            await self.coordinator.async_request_refresh()
+        await self.coordinator.async_set_aux_equipment(aux_num, False)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

@@ -34,7 +34,9 @@ def bypass_get_data_fixture():
     with (
         patch(
             "custom_components.compool.coordinator.PoolController.get_status",
-            return_value=MOCK_POOL_STATUS,
+            # Fresh copy per poll: the coordinator mutates data in place for
+            # optimistic updates, so the shared constant must not leak.
+            side_effect=lambda *args, **kwargs: dict(MOCK_POOL_STATUS),
         ),
         patch(
             "custom_components.compool.coordinator.PoolController.set_pool_temperature",

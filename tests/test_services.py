@@ -14,7 +14,7 @@ from custom_components.compool.const import (
 )
 from homeassistant.core import HomeAssistant
 
-from .const import MOCK_CONFIG_ENTRY
+from .const import MOCK_CONFIG_ENTRY, flush_writes
 
 
 async def test_set_pool_temperature_service(
@@ -41,6 +41,7 @@ async def test_set_pool_temperature_service(
             blocking=True,
         )
 
+        await flush_writes(hass)
         mock_set_temp.assert_called_once_with("82f")
 
 
@@ -68,6 +69,7 @@ async def test_set_pool_temperature_service_celsius(
             blocking=True,
         )
 
+        await flush_writes(hass)
         mock_set_temp.assert_called_once_with("27.8c")
 
 
@@ -94,6 +96,7 @@ async def test_set_pool_temperature_service_default_unit(
             blocking=True,
         )
 
+        await flush_writes(hass)
         mock_set_temp.assert_called_once_with("80f")
 
 
@@ -121,6 +124,7 @@ async def test_set_spa_temperature_service(
             blocking=True,
         )
 
+        await flush_writes(hass)
         mock_set_temp.assert_called_once_with("104f")
 
 
@@ -146,6 +150,7 @@ async def test_set_heater_mode_service(hass: HomeAssistant, bypass_get_data) -> 
             blocking=True,
         )
 
+        await flush_writes(hass)
         mock_set_mode.assert_called_once_with("solar-priority", "pool")
 
 
@@ -173,4 +178,5 @@ async def test_set_heater_mode_service_spa(
             blocking=True,
         )
 
+        await flush_writes(hass)
         mock_set_mode.assert_called_once_with("heater", "spa")

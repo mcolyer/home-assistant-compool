@@ -1,8 +1,22 @@
 """Constants for Compool tests."""
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from datetime import timedelta
+
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.compool.const import DOMAIN
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+
+
+async def flush_writes(hass: HomeAssistant) -> None:
+    """Advance time past the write debounce so queued writes are sent."""
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=2))
+    await hass.async_block_till_done()
+
 
 MOCK_CONFIG = {"host": "192.168.1.100", "port": 8899}
 

@@ -6,7 +6,7 @@ from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
 
-from .const import MOCK_CONFIG_ENTRY
+from .const import MOCK_CONFIG_ENTRY, flush_writes
 
 
 async def test_number_setup(hass: HomeAssistant, bypass_get_data) -> None:
@@ -129,6 +129,7 @@ async def test_set_pool_target_temperature(
             },
             blocking=True,
         )
+        await flush_writes(hass)
 
         mock_set_temp.assert_called_once_with("82f")
 
@@ -165,5 +166,42 @@ async def test_set_spa_target_temperature(hass: HomeAssistant, bypass_get_data) 
             },
             blocking=True,
         )
+        await flush_writes(hass)
 
         mock_set_temp.assert_called_once_with("102f")
+
+
+async def test_set_pool_temperature_optimistic_no_refresh(
+    hass: HomeAssistant, bypass_get_data
+) -> None:
+    """Setting a value updates the UI optimistically without a stale re-poll."""
+    entry = MOCK_CONFIG_ENTRY
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    pool_entities = [
+        s
+        for s in hass.states.async_all()
+        if s.entity_id.startswith("number.") and "pool_target" in s.entity_id
+    ]
+    state = pool_entities[0] if pool_entities else None
+    if state is None:
+        return
+
+    # get_status keeps reporting the old 80.0; a post-write poll would snap back.
+    with patch(
+        "custom_components.compool.coordinator."
+        "CompoolStatusDataUpdateCoordinator.async_request_refresh"
+    ) as mock_refresh:
+        await hass.services.async_call(
+            NUMBER_DOMAIN,
+            "set_value",
+            {ATTR_ENTITY_ID: state.entity_id, "value": 90.0},
+            blocking=True,
+        )
+
+        # Optimistic value is shown immediately, and no refresh was requested.
+        assert hass.states.get(state.entity_id).state == "90.0"
+        mock_refresh.assert_not_called()

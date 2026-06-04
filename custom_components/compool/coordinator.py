@@ -12,7 +12,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import _LOGGER, DOMAIN, STATUS_SCAN_INTERVAL
+from .const import (
+    _LOGGER,
+    DOMAIN,
+    HEATER_MODES,
+    KEY_POOL_HEAT_SOURCE,
+    KEY_SPA_HEAT_SOURCE,
+    STATUS_SCAN_INTERVAL,
+)
 
 
 @dataclass
@@ -69,6 +76,23 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Raise UpdateFailed for no status data."""
         raise UpdateFailed("No status data received from pool controller")
 
+    def _normalize_heat_sources(self, status: dict[str, Any]) -> dict[str, Any]:
+        """Convert pycompool integer heat-source codes (0-3) to mode strings.
+
+        pycompool reports ``pool_heat_source``/``spa_heat_source`` as integers
+        (0=off, 1=heater, 2=solar-priority, 3=solar-only), index-aligned with
+        HEATER_MODES. Entities expect the string mode, so normalize in place.
+        """
+        for key in (KEY_POOL_HEAT_SOURCE, KEY_SPA_HEAT_SOURCE):
+            raw = status.get(key)
+            if isinstance(raw, int) and 0 <= raw < len(HEATER_MODES):
+                status[key] = HEATER_MODES[raw]
+            elif raw not in HEATER_MODES:
+                # Already-normalized strings pass through; anything else is unexpected.
+                _LOGGER.debug("Unexpected %s value from controller: %r", key, raw)
+                status[key] = None
+        return status
+
     def _get_pool_status_with_retry(self) -> dict[str, Any]:
         """Get pool controller status with retry logic for connection failures."""
         max_retries = 5
@@ -87,7 +111,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if not status:
                     self._raise_no_status_error()
                 else:
-                    return status
+                    return self._normalize_heat_sources(status)
 
             except Exception as ex:
                 if attempt < max_retries and self._is_connection_timeout_error(ex):

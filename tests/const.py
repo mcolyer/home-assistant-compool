@@ -7,7 +7,11 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from custom_components.compool.const import DOMAIN, WRITE_BATCH_INTERVAL_SECONDS
+from custom_components.compool.const import (
+    DOMAIN,
+    RECONCILE_DELAY_SECONDS,
+    WRITE_BATCH_INTERVAL_SECONDS,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
@@ -16,6 +20,14 @@ async def flush_writes(hass: HomeAssistant) -> None:
     """Advance time past the batch window so the queued write batch is sent."""
     async_fire_time_changed(
         hass, dt_util.utcnow() + timedelta(seconds=WRITE_BATCH_INTERVAL_SECONDS + 1)
+    )
+    await hass.async_block_till_done()
+
+
+async def flush_reconcile(hass: HomeAssistant) -> None:
+    """Advance time past the post-write reconcile delay so the re-poll fires."""
+    async_fire_time_changed(
+        hass, dt_util.utcnow() + timedelta(seconds=RECONCILE_DELAY_SECONDS + 1)
     )
     await hass.async_block_till_done()
 

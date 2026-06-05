@@ -27,6 +27,12 @@ STATUS_SCAN_INTERVAL = timedelta(seconds=30)
 # this many seconds after the first queued change.
 WRITE_BATCH_INTERVAL_SECONDS = 2
 
+# Delay before re-polling to reconcile optimistic state after a write. The
+# controller broadcasts a heartbeat every ~2.5s and only reflects a just-sent
+# command on a later broadcast, so we wait past that lag before reading - an
+# immediate poll returns the pre-change state and snaps the UI back.
+RECONCILE_DELAY_SECONDS = 5
+
 _LOGGER = logging.getLogger(__package__)
 
 # Configuration keys

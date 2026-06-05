@@ -22,6 +22,7 @@ from .const import (
     HEATER_MODES,
     KEY_POOL_HEAT_SOURCE,
     KEY_SPA_HEAT_SOURCE,
+    RECONCILE_DELAY_SECONDS,
     STATUS_SCAN_INTERVAL,
     WRITE_BATCH_INTERVAL_SECONDS,
 )
@@ -72,6 +73,8 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # window after the first queued change.
         self._pending_writes: dict[str, Callable[[], bool]] = {}
         self._flush_unsub: CALLBACK_TYPE | None = None
+        # Pending delayed reconcile poll scheduled after a batch is sent.
+        self._reconcile_unsub: CALLBACK_TYPE | None = None
         # Last hardware-truth aux states from the most recent poll, used to
         # decide whether an aux toggle is needed (see _set_aux_equipment).
         self._aux_state: dict[int, bool] = {}
@@ -231,9 +234,10 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _apply_optimistic(self, updates: dict[str, Any]) -> None:
         """Reflect a just-requested change in the UI before the next poll.
 
-        Pushing the next poll out (via async_set_updated_data) also gives the
-        controller's heartbeat time to catch up before we read it again, so a
-        stale read can no longer snap the value back.
+        Calling async_set_updated_data also pushes the periodic poll out, so a
+        near-term heartbeat (still showing the old value) can't snap the UI
+        back. The optimistic value is reconciled by the delayed reconcile poll
+        scheduled after the write completes (see _schedule_reconcile).
         """
         if self.data is None:
             return
@@ -262,17 +266,12 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     async def _flush_batch(self, _now: Any) -> None:
-        """Send the whole queued batch to the controller.
+        """Send the whole queued batch to the controller, then reconcile.
 
         Every queued write is sent sequentially under a single bus-lock hold so
-        the half-duplex RS485 bus is never contended.
-
-        We intentionally do NOT re-poll here: the controller's heartbeat lags a
-        just-sent command, so an immediate read returns the pre-change state and
-        would clobber the optimistic value (snapping the UI back). The optimistic
-        update already reflects the request, and the next scheduled poll - pushed
-        ~STATUS_SCAN_INTERVAL out by async_set_updated_data - reconciles against a
-        heartbeat that has had time to catch up.
+        the half-duplex RS485 bus is never contended. Afterwards a single
+        delayed reconcile poll is scheduled (see _schedule_reconcile) to replace
+        the optimistic state with the real heartbeat once it has caught up.
         """
         self._flush_unsub = None
         batch = self._pending_writes
@@ -284,12 +283,35 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 success = await self.hass.async_add_executor_job(send)
                 if not success:
                     _LOGGER.error("Compool write for %s failed", field)
+        self._schedule_reconcile()
+
+    @callback
+    def _schedule_reconcile(self) -> None:
+        """Re-poll once, a few seconds out, to reconcile the optimistic state.
+
+        The controller only reflects a just-sent command on a later heartbeat,
+        so we wait past that lag before reading - an immediate poll would return
+        the pre-change state and snap the UI back. The latest reconcile wins.
+        """
+        if self._reconcile_unsub is not None:
+            self._reconcile_unsub()
+        self._reconcile_unsub = async_call_later(
+            self.hass, RECONCILE_DELAY_SECONDS, self._reconcile
+        )
+
+    async def _reconcile(self, _now: Any) -> None:
+        """Poll the controller to overwrite optimistic state with real status."""
+        self._reconcile_unsub = None
+        await self.async_request_refresh()
 
     async def async_shutdown(self) -> None:
-        """Cancel any pending batched write on unload."""
+        """Cancel any pending batched write and reconcile poll on unload."""
         if self._flush_unsub is not None:
             self._flush_unsub()
             self._flush_unsub = None
+        if self._reconcile_unsub is not None:
+            self._reconcile_unsub()
+            self._reconcile_unsub = None
         self._pending_writes.clear()
         await super().async_shutdown()
 

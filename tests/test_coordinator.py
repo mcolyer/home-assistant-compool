@@ -10,7 +10,7 @@ from custom_components.compool.const import KEY_POOL_HEAT_SOURCE, KEY_SPA_HEAT_S
 from custom_components.compool.coordinator import CompoolStatusDataUpdateCoordinator
 from homeassistant.core import HomeAssistant
 
-from .const import MOCK_CONFIG, MOCK_POOL_STATUS, flush_writes
+from .const import MOCK_CONFIG, MOCK_POOL_STATUS, flush_reconcile, flush_writes
 
 
 def _make_coordinator(hass: HomeAssistant) -> CompoolStatusDataUpdateCoordinator:
@@ -168,8 +168,8 @@ async def test_later_change_does_not_reset_batch_timer(hass: HomeAssistant) -> N
     await coordinator.async_shutdown()
 
 
-async def test_batch_does_not_refresh_immediately(hass: HomeAssistant) -> None:
-    """The flush must not re-poll: a lagging heartbeat would snap the UI back."""
+async def test_batch_reconciles_after_delay(hass: HomeAssistant) -> None:
+    """The flush reconciles via a delayed re-poll, not an immediate (stale) one."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)
 
@@ -182,10 +182,14 @@ async def test_batch_does_not_refresh_immediately(hass: HomeAssistant) -> None:
         await coordinator.async_set_pool_temperature(90, "f")
         await flush_writes(hass)
 
-        # No immediate re-poll; the optimistic value stands until the next
-        # scheduled poll, by which time the heartbeat has caught up.
+        # Sent, but not reconciled yet: an immediate poll would read a stale
+        # heartbeat and snap the value back, so the optimistic value stands.
         mock_refresh.assert_not_called()
         assert coordinator.data["desired_pool_temp_f"] == 90.0
+
+        # Once the heartbeat has had time to catch up, a single re-poll runs.
+        await flush_reconcile(hass)
+        mock_refresh.assert_awaited_once()
 
     await coordinator.async_shutdown()
 
@@ -215,6 +219,36 @@ async def test_aux_off_optimistic_survives_flush(hass: HomeAssistant) -> None:
         # Optimistic off stands and the tracked baseline agrees - no snap-back.
         assert coordinator.data["aux1_on"] is False
         assert coordinator._aux_state[1] is False
+
+    await coordinator.async_shutdown()
+
+
+async def test_reconcile_overrides_optimistic_with_real_status(
+    hass: HomeAssistant,
+) -> None:
+    """The delayed reconcile poll resets a wrong optimistic value to hardware truth."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)  # aux1_on starts True
+    coordinator._aux_state = {1: True}
+
+    # Hardware never actually changed (e.g. the write was not acknowledged).
+    real_status = dict(MOCK_POOL_STATUS)
+
+    with (
+        patch.object(coordinator, "_set_aux_equipment", return_value=False),
+        patch.object(
+            coordinator, "_get_pool_status_with_retry", return_value=real_status
+        ),
+    ):
+        await coordinator.async_set_aux_equipment(1, False)
+        assert coordinator.data["aux1_on"] is False  # optimistic off
+
+        await flush_writes(hass)
+        await flush_reconcile(hass)
+
+        # The heartbeat still reports aux1 on, so the reconcile poll resets the
+        # optimistic off back to the real state.
+        assert coordinator.data["aux1_on"] is True
 
     await coordinator.async_shutdown()
 

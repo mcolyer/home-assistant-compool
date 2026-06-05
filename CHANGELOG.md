@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-05
+
 ### Fixed
 - Fix aux switches (e.g. pool lights) silently failing to turn **off**: pycompool's `set_aux_equipment` guarded its toggle with a lagging heartbeat read that matched the "off" request and skipped the command, so the UI showed off optimistically then snapped back on at the next poll. The integration now tracks the last polled aux state and sends an unconditional `toggle_aux_equipment` only when the desired state differs.
 

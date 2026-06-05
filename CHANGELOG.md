@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-06-05
+
 ### Fixed
 - Reconcile optimistic control state with the controller within a few seconds of a change. v0.4.3 removed the immediate (stale) re-poll but then relied on the periodic poll, which `async_set_updated_data` pushes ~30s out, so a wrong optimistic value (e.g. an unacknowledged write) could linger. The batch flush now schedules a single delayed reconcile poll (just past the controller's ~2.5s heartbeat cadence) that overwrites the optimistic state with the real heartbeat without snapping back.
 

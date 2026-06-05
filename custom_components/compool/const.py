@@ -29,9 +29,8 @@ WRITE_BATCH_INTERVAL_SECONDS = 2
 
 # Delay before re-polling to reconcile optimistic state after a write. The
 # controller broadcasts a heartbeat every ~2.5s and only reflects a just-sent
-# command on a later broadcast, so we wait past that lag before reading - an
-# immediate poll returns the pre-change state and snaps the UI back.
-RECONCILE_DELAY_SECONDS = 10
+# command on a later broadcast, so we wait past that lag before reading.
+RECONCILE_DELAY_SECONDS = 5
 
 # Maximum time to preserve an optimistic value while the controller heartbeat
 # still reports the prior state.

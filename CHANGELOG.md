@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-05
+
+### Changed
+- Reconcile optimistic writes 5 seconds after the controller write completes so switch confirmations clear faster while still avoiding stale heartbeat snap-back.
+- Start the 30-second stale-read guard from successful write completion instead of the initial UI request.
+- Stop exposing the internal switch confirmation guard as a Home Assistant state attribute.
+
 ## [0.5.4] - 2026-06-05
 
 ### Changed

@@ -186,7 +186,7 @@ async def test_switch_turn_off_confirms_optimistic_state(
 
         state = hass.states.get(entity_id)
         assert state.state == "off"
-        assert state.attributes["pending_confirmation"] is True
+        assert coordinator.is_pending_confirmation("aux1_on") is True
 
         coordinator._flush_unsub()
         coordinator._flush_unsub = None
@@ -200,7 +200,7 @@ async def test_switch_turn_off_confirms_optimistic_state(
 
     state = hass.states.get(entity_id)
     assert state.state == "off"
-    assert state.attributes["pending_confirmation"] is False
+    assert coordinator.is_pending_confirmation("aux1_on") is False
 
 
 async def test_switch_turn_off_reconcile_corrects_state_after_window(
@@ -241,7 +241,7 @@ async def test_switch_turn_off_reconcile_corrects_state_after_window(
 
         state = hass.states.get(entity_id)
         assert state.state == "off"
-        assert state.attributes["pending_confirmation"] is True
+        assert coordinator.is_pending_confirmation("aux1_on") is True
 
         coordinator._flush_unsub()
         coordinator._flush_unsub = None
@@ -253,7 +253,7 @@ async def test_switch_turn_off_reconcile_corrects_state_after_window(
 
         state = hass.states.get(entity_id)
         assert state.state == "off"
-        assert state.attributes["pending_confirmation"] is True
+        assert coordinator.is_pending_confirmation("aux1_on") is True
 
         coordinator._pending_confirmation["aux1_on"].requested_at -= 31
         coordinator._reconcile_unsub()
@@ -263,7 +263,7 @@ async def test_switch_turn_off_reconcile_corrects_state_after_window(
 
     state = hass.states.get(entity_id)
     assert state.state == "on"
-    assert state.attributes["pending_confirmation"] is False
+    assert coordinator.is_pending_confirmation("aux1_on") is False
 
 
 async def test_switch_off_on_off_survives_repeated_stale_on_polls(
@@ -314,7 +314,7 @@ async def test_switch_off_on_off_survives_repeated_stale_on_polls(
 
         state = hass.states.get(entity_id)
         assert state.state == "on"
-        assert state.attributes["pending_confirmation"] is False
+        assert coordinator.is_pending_confirmation("aux2_on") is False
 
         await hass.services.async_call(
             SWITCH_DOMAIN,
@@ -324,7 +324,7 @@ async def test_switch_off_on_off_survives_repeated_stale_on_polls(
         )
         state = hass.states.get(entity_id)
         assert state.state == "off"
-        assert state.attributes["pending_confirmation"] is True
+        assert coordinator.is_pending_confirmation("aux2_on") is True
 
         coordinator._flush_unsub()
         coordinator._flush_unsub = None
@@ -339,7 +339,7 @@ async def test_switch_off_on_off_survives_repeated_stale_on_polls(
 
             state = hass.states.get(entity_id)
             assert state.state == "off"
-            assert state.attributes["pending_confirmation"] is True
+            assert coordinator.is_pending_confirmation("aux2_on") is True
             assert coordinator._aux_state[2] is False
 
         coordinator._reconcile_unsub()
@@ -349,7 +349,7 @@ async def test_switch_off_on_off_survives_repeated_stale_on_polls(
 
     state = hass.states.get(entity_id)
     assert state.state == "off"
-    assert state.attributes["pending_confirmation"] is False
+    assert coordinator.is_pending_confirmation("aux2_on") is False
 
 
 async def test_switch_turn_on_ignores_stale_off_reconcile(
@@ -390,7 +390,7 @@ async def test_switch_turn_on_ignores_stale_off_reconcile(
 
         state = hass.states.get(entity_id)
         assert state.state == "on"
-        assert state.attributes["pending_confirmation"] is True
+        assert coordinator.is_pending_confirmation("aux2_on") is True
 
         coordinator._flush_unsub()
         coordinator._flush_unsub = None
@@ -404,7 +404,7 @@ async def test_switch_turn_on_ignores_stale_off_reconcile(
 
         state = hass.states.get(entity_id)
         assert state.state == "on"
-        assert state.attributes["pending_confirmation"] is True
+        assert coordinator.is_pending_confirmation("aux2_on") is True
 
         coordinator._reconcile_unsub()
         coordinator._reconcile_unsub = None
@@ -413,7 +413,7 @@ async def test_switch_turn_on_ignores_stale_off_reconcile(
 
     state = hass.states.get(entity_id)
     assert state.state == "on"
-    assert state.attributes["pending_confirmation"] is False
+    assert coordinator.is_pending_confirmation("aux2_on") is False
 
 
 @pytest.mark.usefixtures("bypass_get_data")
@@ -437,7 +437,7 @@ async def test_switch_attributes(hass: HomeAssistant) -> None:
     assert state.attributes.get("host") == MOCK_CONFIG["host"]
     assert state.attributes.get("port") == MOCK_CONFIG["port"]
     assert "last_updated" in state.attributes
-    assert state.attributes.get("pending_confirmation") is False
+    assert "pending_confirmation" not in state.attributes
 
 
 async def test_switch_no_data(hass: HomeAssistant) -> None:

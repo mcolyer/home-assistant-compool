@@ -140,7 +140,4 @@ class CompoolSwitch(CompoolEntity, SwitchEntity):
             "host": self.coordinator.host,
             "port": self.coordinator.port,
             "last_updated": self.coordinator.last_update_success,
-            "pending_confirmation": self.coordinator.is_pending_confirmation(
-                AUX_KEY_MAPPING[self.entity_description.key]
-            ),
         }

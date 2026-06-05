@@ -7,7 +7,10 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.compool.const import KEY_POOL_HEAT_SOURCE, KEY_SPA_HEAT_SOURCE
-from custom_components.compool.coordinator import CompoolStatusDataUpdateCoordinator
+from custom_components.compool.coordinator import (
+    CompoolStatusDataUpdateCoordinator,
+    PendingWrite,
+)
 from homeassistant.core import HomeAssistant
 
 from .const import MOCK_CONFIG, MOCK_POOL_STATUS, flush_reconcile, flush_writes
@@ -260,6 +263,36 @@ async def test_reconcile_overrides_optimistic_after_confirmation_window(
     await coordinator.async_shutdown()
 
 
+async def test_confirmation_window_starts_after_successful_write(
+    hass: HomeAssistant,
+) -> None:
+    """A slow queued write does not spend the stale-read guard before it is sent."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)  # aux1_on starts True
+    coordinator._aux_state = {1: True}
+
+    with (
+        patch.object(coordinator, "_set_aux_equipment", return_value=True),
+        patch.object(
+            coordinator,
+            "_get_pool_status_with_retry",
+            return_value=dict(MOCK_POOL_STATUS),
+        ),
+    ):
+        await coordinator.async_set_aux_equipment(1, False)
+        coordinator._pending_confirmation["aux1_on"].requested_at -= 31
+
+        await flush_writes(hass)
+        assert coordinator.is_pending_confirmation("aux1_on") is True
+
+        await flush_reconcile(hass)
+
+        assert coordinator.data["aux1_on"] is False
+        assert coordinator.is_pending_confirmation("aux1_on") is True
+
+    await coordinator.async_shutdown()
+
+
 async def test_aux_off_survives_repeated_stale_on_polls(
     hass: HomeAssistant,
 ) -> None:
@@ -437,8 +470,9 @@ async def test_write_waits_for_bus_lock(hass: HomeAssistant) -> None:
     ):
         # Hold the bus as a concurrent poll would, then start a flush directly.
         await coordinator._io_lock.acquire()
-        coordinator._pending_writes["pool_temp"] = (
-            lambda: coordinator._set_pool_temperature(85, "f")
+        coordinator._pending_writes["pool_temp"] = PendingWrite(
+            lambda: coordinator._set_pool_temperature(85, "f"),
+            ("desired_pool_temp_f",),
         )
         task = asyncio.ensure_future(coordinator._flush_batch(None))
         await asyncio.sleep(0)  # let the flush reach the lock and block

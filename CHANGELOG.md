@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-06-05
+
 ### Fixed
 - Fix the UI snapping a switch back to its previous state right after a change (and the resulting aux toggle desync): the post-write reconcile poll read the controller's heartbeat before it had caught up, so the stale value overwrote the correct optimistic state. The batch flush no longer re-polls immediately; the optimistic value stands until the next scheduled poll, by which time the heartbeat reflects the change.
 

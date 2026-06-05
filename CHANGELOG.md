@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-05
+
+### Changed
+- Increase reconcile delay from 5s to 10s to accommodate controllers with slower heartbeat cadences
+
 ## [0.4.4] - 2026-06-05
 
 ### Fixed

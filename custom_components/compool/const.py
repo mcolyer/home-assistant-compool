@@ -31,7 +31,7 @@ WRITE_BATCH_INTERVAL_SECONDS = 2
 # controller broadcasts a heartbeat every ~2.5s and only reflects a just-sent
 # command on a later broadcast, so we wait past that lag before reading - an
 # immediate poll returns the pre-change state and snaps the UI back.
-RECONCILE_DELAY_SECONDS = 5
+RECONCILE_DELAY_SECONDS = 10
 
 _LOGGER = logging.getLogger(__package__)
 

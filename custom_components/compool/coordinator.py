@@ -262,11 +262,17 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     async def _flush_batch(self, _now: Any) -> None:
-        """Send the whole queued batch to the controller, then reconcile.
+        """Send the whole queued batch to the controller.
 
         Every queued write is sent sequentially under a single bus-lock hold so
-        the half-duplex RS485 bus is never contended, then one refresh confirms
-        the real hardware state (correcting any missed ACK within seconds).
+        the half-duplex RS485 bus is never contended.
+
+        We intentionally do NOT re-poll here: the controller's heartbeat lags a
+        just-sent command, so an immediate read returns the pre-change state and
+        would clobber the optimistic value (snapping the UI back). The optimistic
+        update already reflects the request, and the next scheduled poll - pushed
+        ~STATUS_SCAN_INTERVAL out by async_set_updated_data - reconciles against a
+        heartbeat that has had time to catch up.
         """
         self._flush_unsub = None
         batch = self._pending_writes
@@ -278,7 +284,6 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 success = await self.hass.async_add_executor_job(send)
                 if not success:
                     _LOGGER.error("Compool write for %s failed", field)
-        await self.async_request_refresh()
 
     async def async_shutdown(self) -> None:
         """Cancel any pending batched write on unload."""

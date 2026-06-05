@@ -168,8 +168,8 @@ async def test_later_change_does_not_reset_batch_timer(hass: HomeAssistant) -> N
     await coordinator.async_shutdown()
 
 
-async def test_batch_reconciles_with_refresh(hass: HomeAssistant) -> None:
-    """After the batch is sent, a single refresh reconciles real hardware state."""
+async def test_batch_does_not_refresh_immediately(hass: HomeAssistant) -> None:
+    """The flush must not re-poll: a lagging heartbeat would snap the UI back."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)
 
@@ -180,10 +180,41 @@ async def test_batch_reconciles_with_refresh(hass: HomeAssistant) -> None:
         patch.object(coordinator, "_set_pool_temperature", return_value=True),
     ):
         await coordinator.async_set_pool_temperature(90, "f")
-        mock_refresh.assert_not_called()  # not before the send
+        await flush_writes(hass)
+
+        # No immediate re-poll; the optimistic value stands until the next
+        # scheduled poll, by which time the heartbeat has caught up.
+        mock_refresh.assert_not_called()
+        assert coordinator.data["desired_pool_temp_f"] == 90.0
+
+    await coordinator.async_shutdown()
+
+
+async def test_aux_off_optimistic_survives_flush(hass: HomeAssistant) -> None:
+    """Turning an aux off keeps the optimistic 'off' after the toggle is sent.
+
+    Reproduces the reported bug: the hardware toggled off but a stale immediate
+    poll snapped the switch back to on. With no post-flush re-poll, the
+    optimistic off (and the tracked aux state) stay off.
+    """
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)  # aux1_on starts True
+    coordinator._aux_state = {1: True}
+
+    with (
+        patch.object(coordinator, "async_request_refresh", new=AsyncMock()),
+        patch("custom_components.compool.coordinator.PoolController") as mock_ctrl,
+    ):
+        mock_ctrl.return_value.toggle_aux_equipment.return_value = True
+
+        await coordinator.async_set_aux_equipment(1, False)
+        assert coordinator.data["aux1_on"] is False  # optimistic off
 
         await flush_writes(hass)
-        mock_refresh.assert_awaited_once()  # exactly one reconcile poll
+        mock_ctrl.return_value.toggle_aux_equipment.assert_called_once_with(1)
+        # Optimistic off stands and the tracked baseline agrees - no snap-back.
+        assert coordinator.data["aux1_on"] is False
+        assert coordinator._aux_state[1] is False
 
     await coordinator.async_shutdown()
 

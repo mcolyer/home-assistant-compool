@@ -1,8 +1,7 @@
 """Test Compool coordinator helpers."""
 
 import asyncio
-from functools import partial
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -103,13 +102,16 @@ async def test_rapid_writes_coalesce_to_final_value(hass: HomeAssistant) -> None
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)
 
-    with patch.object(
-        coordinator, "_set_pool_temperature", return_value=True
-    ) as mock_set:
+    with (
+        patch.object(coordinator, "async_request_refresh", new=AsyncMock()),
+        patch.object(
+            coordinator, "_set_pool_temperature", return_value=True
+        ) as mock_set,
+    ):
         await coordinator.async_set_pool_temperature(80, "f")
         await coordinator.async_set_pool_temperature(85, "f")
         await coordinator.async_set_pool_temperature(90, "f")
-        mock_set.assert_not_called()  # nothing sent until the field goes quiet
+        mock_set.assert_not_called()  # nothing sent until the batch window ends
 
         await flush_writes(hass)
         mock_set.assert_called_once_with(90, "f")
@@ -117,12 +119,14 @@ async def test_rapid_writes_coalesce_to_final_value(hass: HomeAssistant) -> None
     await coordinator.async_shutdown()
 
 
-async def test_distinct_fields_each_flush(hass: HomeAssistant) -> None:
-    """Independent fields are debounced separately and all get sent."""
+async def test_distinct_fields_flush_in_one_batch(hass: HomeAssistant) -> None:
+    """Independent fields queued in one window all flush together in one batch."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)
+    coordinator._aux_state = {1: True}  # currently on, so "off" must send
 
     with (
+        patch.object(coordinator, "async_request_refresh", new=AsyncMock()),
         patch.object(
             coordinator, "_set_pool_temperature", return_value=True
         ) as mock_pool,
@@ -143,40 +147,127 @@ async def test_distinct_fields_each_flush(hass: HomeAssistant) -> None:
     await coordinator.async_shutdown()
 
 
+async def test_later_change_does_not_reset_batch_timer(hass: HomeAssistant) -> None:
+    """One-shot batch: a change after the first does not push the flush out."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)
+
+    with (
+        patch.object(coordinator, "async_request_refresh", new=AsyncMock()),
+        patch.object(coordinator, "_set_pool_temperature", return_value=True),
+        patch.object(coordinator, "_set_spa_temperature", return_value=True),
+    ):
+        await coordinator.async_set_pool_temperature(85, "f")
+        first_timer = coordinator._flush_unsub
+        assert first_timer is not None
+
+        # A later change joins the same batch without re-arming the timer.
+        await coordinator.async_set_spa_temperature(99, "f")
+        assert coordinator._flush_unsub is first_timer
+
+    await coordinator.async_shutdown()
+
+
+async def test_batch_reconciles_with_refresh(hass: HomeAssistant) -> None:
+    """After the batch is sent, a single refresh reconciles real hardware state."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)
+
+    with (
+        patch.object(
+            coordinator, "async_request_refresh", new=AsyncMock()
+        ) as mock_refresh,
+        patch.object(coordinator, "_set_pool_temperature", return_value=True),
+    ):
+        await coordinator.async_set_pool_temperature(90, "f")
+        mock_refresh.assert_not_called()  # not before the send
+
+        await flush_writes(hass)
+        mock_refresh.assert_awaited_once()  # exactly one reconcile poll
+
+    await coordinator.async_shutdown()
+
+
 async def test_failed_write_keeps_optimistic_value(hass: HomeAssistant) -> None:
     """A failed send still leaves the optimistic value for the next poll to fix."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)
 
-    with patch.object(
-        coordinator, "_set_pool_temperature", return_value=False
-    ) as mock_set:
+    with (
+        patch.object(coordinator, "async_request_refresh", new=AsyncMock()),
+        patch.object(
+            coordinator, "_set_pool_temperature", return_value=False
+        ) as mock_set,
+    ):
         await coordinator.async_set_pool_temperature(90, "f")
         assert coordinator.data["desired_pool_temp_f"] == 90.0  # optimistic
 
         await flush_writes(hass)
         mock_set.assert_called_once_with(90, "f")  # send was attempted
 
-    # Optimistic value persists; the periodic poll will reconcile it.
-    assert coordinator.data["desired_pool_temp_f"] == 90.0
+        # Optimistic value persists; the reconcile poll will fix it.
+        assert coordinator.data["desired_pool_temp_f"] == 90.0
 
     await coordinator.async_shutdown()
 
 
+async def test_aux_off_sends_single_toggle(hass: HomeAssistant) -> None:
+    """Turning a currently-on aux off sends exactly one unconditional toggle."""
+    coordinator = _make_coordinator(hass)
+    coordinator._aux_state = {1: True}  # last poll: aux1 on
+
+    with patch(
+        "custom_components.compool.coordinator.PoolController"
+    ) as mock_controller:
+        instance = mock_controller.return_value
+        instance.toggle_aux_equipment.return_value = True
+
+        assert coordinator._set_aux_equipment(1, False) is True
+
+        instance.toggle_aux_equipment.assert_called_once_with(1)
+        # Baseline advances so a follow-up change in the same window is correct.
+        assert coordinator._aux_state[1] is False
+
+
+async def test_aux_no_change_sends_nothing(hass: HomeAssistant) -> None:
+    """Requesting the state an aux is already in sends no command."""
+    coordinator = _make_coordinator(hass)
+    coordinator._aux_state = {1: False}  # last poll: aux1 already off
+
+    with patch(
+        "custom_components.compool.coordinator.PoolController"
+    ) as mock_controller:
+        assert coordinator._set_aux_equipment(1, False) is True
+        mock_controller.assert_not_called()  # no connection, no toggle
+
+
+async def test_poll_captures_aux_state(hass: HomeAssistant) -> None:
+    """Each successful poll records hardware-truth aux states as the baseline."""
+    coordinator = _make_coordinator(hass)
+
+    coordinator._capture_aux_state(dict(MOCK_POOL_STATUS))
+
+    assert coordinator._aux_state[1] is True
+    assert coordinator._aux_state[2] is False
+
+
 async def test_write_waits_for_bus_lock(hass: HomeAssistant) -> None:
-    """A debounced write cannot reach the bus while the lock is held by a poll."""
+    """A queued batch cannot reach the bus while the lock is held by a poll."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)
 
-    with patch.object(
-        coordinator, "_set_pool_temperature", return_value=True
-    ) as mock_set:
+    with (
+        patch.object(coordinator, "async_request_refresh", new=AsyncMock()),
+        patch.object(
+            coordinator, "_set_pool_temperature", return_value=True
+        ) as mock_set,
+    ):
         # Hold the bus as a concurrent poll would, then start a flush directly.
         await coordinator._io_lock.acquire()
-        coordinator._pending_writes["pool_temp"] = partial(
-            coordinator._set_pool_temperature, 85, "f"
+        coordinator._pending_writes["pool_temp"] = (
+            lambda: coordinator._set_pool_temperature(85, "f")
         )
-        task = asyncio.ensure_future(coordinator._flush_write("pool_temp", None))
+        task = asyncio.ensure_future(coordinator._flush_batch(None))
         await asyncio.sleep(0)  # let the flush reach the lock and block
 
         assert not task.done()
@@ -190,7 +281,7 @@ async def test_write_waits_for_bus_lock(hass: HomeAssistant) -> None:
 
 
 async def test_shutdown_cancels_pending_writes(hass: HomeAssistant) -> None:
-    """Pending debounced writes are dropped on unload."""
+    """A pending batched write is dropped on unload."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)
 

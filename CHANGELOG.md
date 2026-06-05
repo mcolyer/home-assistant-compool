@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix aux switches (e.g. pool lights) silently failing to turn **off**: pycompool's `set_aux_equipment` guarded its toggle with a lagging heartbeat read that matched the "off" request and skipped the command, so the UI showed off optimistically then snapped back on at the next poll. The integration now tracks the last polled aux state and sends an unconditional `toggle_aux_equipment` only when the desired state differs.
+
+### Changed
+- Replace the per-field write debounce with a single batched write queue: optimistic changes accumulate and the whole batch is sent to the controller once per collect window, followed by one reconciling refresh
+
 ## [0.4.1] - 2026-06-04
 
 ### Fixed

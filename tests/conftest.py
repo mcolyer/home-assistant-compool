@@ -51,7 +51,7 @@ def bypass_get_data_fixture():
             return_value=True,
         ),
         patch(
-            "custom_components.compool.coordinator.PoolController.set_aux_equipment",
+            "custom_components.compool.coordinator.PoolController.toggle_aux_equipment",
             return_value=True,
             create=True,
         ),

@@ -22,9 +22,10 @@ DEFAULT_NAME = "Compool Pool Controller"
 # Compool local polling - check every 30 seconds
 STATUS_SCAN_INTERVAL = timedelta(seconds=30)
 
-# Coalesce rapid writes (e.g. temperature slider drags) so only the final
-# value for a given field is sent to the controller after this quiet period.
-WRITE_DEBOUNCE_SECONDS = 0.75
+# Collect window for batching writes: changes (slider drags, multiple toggles)
+# are queued optimistically and the whole batch is sent to the controller once,
+# this many seconds after the first queued change.
+WRITE_BATCH_INTERVAL_SECONDS = 2
 
 _LOGGER = logging.getLogger(__package__)
 

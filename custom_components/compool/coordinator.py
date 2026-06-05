@@ -23,7 +23,7 @@ from .const import (
     KEY_POOL_HEAT_SOURCE,
     KEY_SPA_HEAT_SOURCE,
     STATUS_SCAN_INTERVAL,
-    WRITE_DEBOUNCE_SECONDS,
+    WRITE_BATCH_INTERVAL_SECONDS,
 )
 
 
@@ -67,10 +67,14 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Serialize every transaction on the half-duplex RS485 bus: only one
         # poll or write may touch the controller at a time.
         self._io_lock = asyncio.Lock()
-        # Per-field write debounce: the latest pending send wins, and its
-        # in-flight timer is reset on each new change to the same field.
+        # Batched writes: changes accumulate in the queue (latest value per
+        # field wins) and the whole batch is flushed once, a single collect
+        # window after the first queued change.
         self._pending_writes: dict[str, Callable[[], bool]] = {}
-        self._debounce_unsub: dict[str, CALLBACK_TYPE] = {}
+        self._flush_unsub: CALLBACK_TYPE | None = None
+        # Last hardware-truth aux states from the most recent poll, used to
+        # decide whether an aux toggle is needed (see _set_aux_equipment).
+        self._aux_state: dict[int, bool] = {}
 
     def _is_connection_timeout_error(self, exception: Exception) -> bool:
         """Check if the exception is a connection timeout error."""
@@ -171,9 +175,22 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update pool controller status."""
         async with self._io_lock:
-            return await self.hass.async_add_executor_job(
+            status = await self.hass.async_add_executor_job(
                 self._get_pool_status_with_retry
             )
+        self._capture_aux_state(status)
+        return status
+
+    def _capture_aux_state(self, status: dict[str, Any]) -> None:
+        """Record the hardware-truth aux states reported by a poll.
+
+        This baseline is independent of the in-place optimistic mutation of
+        ``self.data`` and drives the toggle decision in _set_aux_equipment.
+        """
+        for aux_num in range(1, 9):
+            value = status.get(f"aux{aux_num}_on")
+            if isinstance(value, bool):
+                self._aux_state[aux_num] = value
 
     def _format_temperature_string(self, temperature: float, unit: str) -> str:
         """Format temperature and unit for pycompool API."""
@@ -230,35 +247,44 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         send: Callable[[], bool],
         optimistic: dict[str, Any],
     ) -> None:
-        """Optimistically update the UI and debounce the hardware write.
+        """Optimistically update the UI and queue the hardware write.
 
-        Rapid changes to the same field (slider drags, double-clicks) collapse
-        to a single send of the final value once the field goes quiet.
+        Changes accumulate in a single batch (the latest value per field wins).
+        The first queued change arms one flush timer; later changes within the
+        collect window join the same batch without pushing the timer out, so the
+        whole batch is sent to the controller at once.
         """
         self._apply_optimistic(optimistic)
         self._pending_writes[field] = send
-        if unsub := self._debounce_unsub.pop(field, None):
-            unsub()
-        self._debounce_unsub[field] = async_call_later(
-            self.hass, WRITE_DEBOUNCE_SECONDS, partial(self._flush_write, field)
-        )
+        if self._flush_unsub is None:
+            self._flush_unsub = async_call_later(
+                self.hass, WRITE_BATCH_INTERVAL_SECONDS, self._flush_batch
+            )
 
-    async def _flush_write(self, field: str, _now: Any) -> None:
-        """Send the latest pending value for a field to the controller."""
-        self._debounce_unsub.pop(field, None)
-        send = self._pending_writes.pop(field, None)
-        if send is None:
+    async def _flush_batch(self, _now: Any) -> None:
+        """Send the whole queued batch to the controller, then reconcile.
+
+        Every queued write is sent sequentially under a single bus-lock hold so
+        the half-duplex RS485 bus is never contended, then one refresh confirms
+        the real hardware state (correcting any missed ACK within seconds).
+        """
+        self._flush_unsub = None
+        batch = self._pending_writes
+        self._pending_writes = {}
+        if not batch:
             return
         async with self._io_lock:
-            success = await self.hass.async_add_executor_job(send)
-        if not success:
-            _LOGGER.error("Compool write for %s failed", field)
+            for field, send in batch.items():
+                success = await self.hass.async_add_executor_job(send)
+                if not success:
+                    _LOGGER.error("Compool write for %s failed", field)
+        await self.async_request_refresh()
 
     async def async_shutdown(self) -> None:
-        """Cancel any pending debounced writes on unload."""
-        for unsub in self._debounce_unsub.values():
-            unsub()
-        self._debounce_unsub.clear()
+        """Cancel any pending batched write on unload."""
+        if self._flush_unsub is not None:
+            self._flush_unsub()
+            self._flush_unsub = None
         self._pending_writes.clear()
         await super().async_shutdown()
 
@@ -294,21 +320,30 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     def _set_aux_equipment(self, aux_num: int, state: bool) -> bool:
-        """Set auxiliary equipment state using pycompool.
+        """Drive an aux circuit to the requested state.
 
-        Note: pycompool reads the controller's heartbeat and only sends a toggle
-        when the current state differs from the requested one. Two intentional
-        toggles of the same aux within one heartbeat window can therefore still
-        desync. The per-field debounce in _schedule_write collapses rapid
-        changes and removes the common case; a full fix would track desired
-        state here and use toggle_aux_equipment instead.
+        The hardware only supports *toggling* a circuit. pycompool's
+        set_aux_equipment guards the toggle with its own fresh heartbeat read,
+        which lags the real state and silently drops the toggle (notably for
+        "off", where a stale "already off" read matches the request). Instead we
+        decide here against the last polled state (self._aux_state) and send an
+        unconditional toggle only when it differs, so the command never depends
+        on a single lagging heartbeat read.
         """
+        current = self._aux_state.get(aux_num)
+        if current == state:
+            # Already in the requested state per the last poll; nothing to do.
+            return True
         try:
             controller = PoolController(self._device, 9600)
-            return controller.set_aux_equipment(aux_num, state)
+            success = controller.toggle_aux_equipment(aux_num)
         except Exception as ex:
             _LOGGER.error("Error setting aux%d equipment: %s", aux_num, ex)
             return False
+        if success:
+            # Reflect the toggle so a later change in the same window is correct.
+            self._aux_state[aux_num] = state
+        return success
 
     async def async_set_aux_equipment(self, aux_num: int, state: bool) -> None:
         """Set auxiliary equipment state."""

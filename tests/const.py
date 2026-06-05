@@ -7,14 +7,16 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from custom_components.compool.const import DOMAIN
+from custom_components.compool.const import DOMAIN, WRITE_BATCH_INTERVAL_SECONDS
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 
 async def flush_writes(hass: HomeAssistant) -> None:
-    """Advance time past the write debounce so queued writes are sent."""
-    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=2))
+    """Advance time past the batch window so the queued write batch is sent."""
+    async_fire_time_changed(
+        hass, dt_util.utcnow() + timedelta(seconds=WRITE_BATCH_INTERVAL_SECONDS + 1)
+    )
     await hass.async_block_till_done()
 
 

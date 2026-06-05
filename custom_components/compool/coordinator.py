@@ -92,6 +92,25 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # that has not yet been observed in a successful controller poll.
         self._pending_confirmation: dict[str, PendingConfirmation] = {}
 
+    def _aux_status_snapshot(self, status: dict[str, Any]) -> dict[str, Any]:
+        """Return only aux status bits for focused debug logging."""
+        return {
+            f"aux{aux_num}_on": status.get(f"aux{aux_num}_on")
+            for aux_num in range(1, 9)
+        }
+
+    def _pending_confirmation_snapshot(self) -> dict[str, dict[str, Any]]:
+        """Return pending confirmations with current age for debug logging."""
+        now = time.monotonic()
+        return {
+            key: {
+                "expected": confirmation.expected,
+                "age": round(now - confirmation.requested_at, 3),
+                "stale_reconcile_count": confirmation.stale_reconcile_count,
+            }
+            for key, confirmation in self._pending_confirmation.items()
+        }
+
     def _is_connection_timeout_error(self, exception: Exception) -> bool:
         """Check if the exception is a connection timeout error."""
         error_msg = str(exception).lower()
@@ -134,21 +153,51 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         base_delay = 1  # seconds
 
         for attempt in range(max_retries + 1):
+            poll_started = time.monotonic()
             try:
+                _LOGGER.debug(
+                    "Compool bus poll start: attempt=%d/%d device=%s",
+                    attempt + 1,
+                    max_retries + 1,
+                    self._device,
+                )
                 controller = PoolController(self._device, 9600)
                 status = controller.get_status()
                 # Controller automatically disconnects after get_status
+                poll_duration = time.monotonic() - poll_started
 
                 # Reset failure tracking on success
                 self._consecutive_failures = 0
                 self._last_failure_time = 0
 
                 if not status:
+                    _LOGGER.debug(
+                        "Compool bus poll returned no status: attempt=%d duration=%.3fs",
+                        attempt + 1,
+                        poll_duration,
+                    )
                     self._raise_no_status_error()
                 else:
+                    _LOGGER.debug(
+                        "Compool bus poll complete: attempt=%d duration=%.3fs "
+                        "status_keys=%d aux=%s pending=%s",
+                        attempt + 1,
+                        poll_duration,
+                        len(status),
+                        self._aux_status_snapshot(status),
+                        self._pending_confirmation_snapshot(),
+                    )
                     return self._normalize_heat_sources(status)
 
             except Exception as ex:
+                poll_duration = time.monotonic() - poll_started
+                _LOGGER.debug(
+                    "Compool bus poll failed: attempt=%d/%d duration=%.3fs error=%r",
+                    attempt + 1,
+                    max_retries + 1,
+                    poll_duration,
+                    ex,
+                )
                 if attempt < max_retries and self._is_connection_timeout_error(ex):
                     delay = base_delay * (2**attempt)  # Exponential backoff
                     _LOGGER.warning(
@@ -190,12 +239,25 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update pool controller status."""
+        lock_wait_started = time.monotonic()
         async with self._io_lock:
+            lock_wait_duration = time.monotonic() - lock_wait_started
+            _LOGGER.debug(
+                "Compool bus poll acquired lock: wait=%.3fs pending_writes=%s",
+                lock_wait_duration,
+                list(self._pending_writes),
+            )
             status = await self.hass.async_add_executor_job(
                 self._get_pool_status_with_retry
             )
         status = self._reconcile_pending_status(status)
         self._capture_aux_state(status)
+        _LOGGER.debug(
+            "Compool coordinator poll applied: aux=%s aux_state=%s pending=%s",
+            self._aux_status_snapshot(status),
+            self._aux_state,
+            self._pending_confirmation_snapshot(),
+        )
         return status
 
     def _capture_aux_state(self, status: dict[str, Any]) -> None:
@@ -212,17 +274,35 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _reconcile_pending_status(self, status: dict[str, Any]) -> dict[str, Any]:
         """Preserve optimistic values during a bounded confirmation window."""
         if not self._pending_confirmation:
+            _LOGGER.debug(
+                "Compool reconcile skipped: no pending confirmations aux=%s",
+                self._aux_status_snapshot(status),
+            )
             return status
 
         reconciled_status = dict(status)
         pending_confirmation: dict[str, PendingConfirmation] = {}
         should_repoll = False
         now = time.monotonic()
+        _LOGGER.debug(
+            "Compool reconcile start: aux=%s pending=%s window=%.0fs",
+            self._aux_status_snapshot(status),
+            self._pending_confirmation_snapshot(),
+            OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
+        )
 
         for key, confirmation in self._pending_confirmation.items():
             age = now - confirmation.requested_at
             if key not in reconciled_status:
                 if age <= OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS:
+                    _LOGGER.debug(
+                        "Compool reconcile preserves optimistic missing key: "
+                        "key=%s expected=%r age=%.3fs stale_polls=%d",
+                        key,
+                        confirmation.expected,
+                        age,
+                        confirmation.stale_reconcile_count,
+                    )
                     pending_confirmation[key] = confirmation
                     should_repoll = True
                 else:
@@ -237,10 +317,27 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 continue
             reported = reconciled_status[key]
             if reported == confirmation.expected:
+                _LOGGER.debug(
+                    "Compool reconcile confirmed optimistic value: key=%s "
+                    "expected=%r age=%.3fs stale_polls=%d",
+                    key,
+                    confirmation.expected,
+                    age,
+                    confirmation.stale_reconcile_count,
+                )
                 continue
 
             stale_count = confirmation.stale_reconcile_count + 1
             if age <= OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS:
+                _LOGGER.debug(
+                    "Compool reconcile preserves optimistic stale value: key=%s "
+                    "expected=%r reported=%r age=%.3fs stale_polls=%d",
+                    key,
+                    confirmation.expected,
+                    reported,
+                    age,
+                    stale_count,
+                )
                 confirmation.stale_reconcile_count = stale_count
                 reconciled_status[key] = confirmation.expected
                 pending_confirmation[key] = confirmation
@@ -260,6 +357,12 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._pending_confirmation = pending_confirmation
         if should_repoll:
             self._schedule_reconcile()
+        _LOGGER.debug(
+            "Compool reconcile complete: aux=%s pending=%s should_repoll=%s",
+            self._aux_status_snapshot(reconciled_status),
+            self._pending_confirmation_snapshot(),
+            should_repoll,
+        )
         return reconciled_status
 
     def is_pending_confirmation(self, key: str) -> bool:
@@ -312,10 +415,17 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self.data is None:
             return
+        prior_values = {key: self.data.get(key) for key in updates}
         for key, value in updates.items():
             self._pending_confirmation[key] = PendingConfirmation(
                 expected=value, requested_at=time.monotonic()
             )
+        _LOGGER.debug(
+            "Compool optimistic update applied: updates=%s prior=%s pending=%s",
+            updates,
+            prior_values,
+            self._pending_confirmation_snapshot(),
+        )
         self.data.update(updates)
         self.async_set_updated_data(self.data)
 
@@ -335,9 +445,23 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         self._apply_optimistic(optimistic)
         self._pending_writes[field] = send
+        timer_was_armed = self._flush_unsub is not None
+        _LOGGER.debug(
+            "Compool write queued: field=%s optimistic=%s queued_fields=%s "
+            "flush_timer_already_armed=%s",
+            field,
+            optimistic,
+            list(self._pending_writes),
+            timer_was_armed,
+        )
         if self._flush_unsub is None:
             self._flush_unsub = async_call_later(
                 self.hass, WRITE_BATCH_INTERVAL_SECONDS, self._flush_batch
+            )
+            _LOGGER.debug(
+                "Compool write flush scheduled: delay=%.3fs queued_fields=%s",
+                WRITE_BATCH_INTERVAL_SECONDS,
+                list(self._pending_writes),
             )
 
     async def _flush_batch(self, _now: Any) -> None:
@@ -352,12 +476,39 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         batch = self._pending_writes
         self._pending_writes = {}
         if not batch:
+            _LOGGER.debug("Compool write flush skipped: empty batch")
             return
+        batch_started = time.monotonic()
+        _LOGGER.debug(
+            "Compool write flush start: fields=%s count=%d pending=%s",
+            list(batch),
+            len(batch),
+            self._pending_confirmation_snapshot(),
+        )
+        lock_wait_started = time.monotonic()
         async with self._io_lock:
+            _LOGGER.debug(
+                "Compool write flush acquired lock: wait=%.3fs fields=%s",
+                time.monotonic() - lock_wait_started,
+                list(batch),
+            )
             for field, send in batch.items():
+                write_started = time.monotonic()
+                _LOGGER.debug("Compool bus write start: field=%s", field)
                 success = await self.hass.async_add_executor_job(send)
+                _LOGGER.debug(
+                    "Compool bus write complete: field=%s success=%s duration=%.3fs",
+                    field,
+                    success,
+                    time.monotonic() - write_started,
+                )
                 if not success:
                     _LOGGER.error("Compool write for %s failed", field)
+        _LOGGER.debug(
+            "Compool write flush complete: fields=%s total_duration=%.3fs",
+            list(batch),
+            time.monotonic() - batch_started,
+        )
         self._schedule_reconcile()
 
     @callback
@@ -369,14 +520,24 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         the pre-change state and snap the UI back. The latest reconcile wins.
         """
         if self._reconcile_unsub is not None:
+            _LOGGER.debug("Compool reconcile rescheduled: cancelling prior timer")
             self._reconcile_unsub()
         self._reconcile_unsub = async_call_later(
             self.hass, RECONCILE_DELAY_SECONDS, self._reconcile
+        )
+        _LOGGER.debug(
+            "Compool reconcile scheduled: delay=%.3fs pending=%s",
+            RECONCILE_DELAY_SECONDS,
+            self._pending_confirmation_snapshot(),
         )
 
     async def _reconcile(self, _now: Any) -> None:
         """Poll the controller to overwrite optimistic state with real status."""
         self._reconcile_unsub = None
+        _LOGGER.debug(
+            "Compool reconcile timer fired: pending=%s",
+            self._pending_confirmation_snapshot(),
+        )
         await self.async_refresh()
 
     async def async_shutdown(self) -> None:
@@ -387,6 +548,11 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._reconcile_unsub is not None:
             self._reconcile_unsub()
             self._reconcile_unsub = None
+        _LOGGER.debug(
+            "Compool coordinator shutdown: dropping pending_writes=%s pending=%s",
+            list(self._pending_writes),
+            self._pending_confirmation_snapshot(),
+        )
         self._pending_writes.clear()
         self._pending_confirmation.clear()
         await super().async_shutdown()
@@ -436,20 +602,52 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         current = self._aux_state.get(aux_num)
         if current == state:
             # Already in the requested state per the last poll; nothing to do.
+            _LOGGER.debug(
+                "Compool aux write skipped: aux=%d desired=%s aux_state=%s reason=already_matching",
+                aux_num,
+                state,
+                current,
+            )
             return True
         try:
+            _LOGGER.debug(
+                "Compool aux toggle start: aux=%d desired=%s aux_state=%s",
+                aux_num,
+                state,
+                current,
+            )
+            toggle_started = time.monotonic()
             controller = PoolController(self._device, 9600)
             success = controller.toggle_aux_equipment(aux_num)
+            _LOGGER.debug(
+                "Compool aux toggle complete: aux=%d desired=%s success=%s duration=%.3fs",
+                aux_num,
+                state,
+                success,
+                time.monotonic() - toggle_started,
+            )
         except Exception as ex:
             _LOGGER.error("Error setting aux%d equipment: %s", aux_num, ex)
             return False
         if success:
             # Reflect the toggle so a later change in the same window is correct.
             self._aux_state[aux_num] = state
+            _LOGGER.debug(
+                "Compool aux state advanced after toggle: aux=%d aux_state=%s",
+                aux_num,
+                self._aux_state,
+            )
         return success
 
     async def async_set_aux_equipment(self, aux_num: int, state: bool) -> None:
         """Set auxiliary equipment state."""
+        _LOGGER.debug(
+            "Compool aux request received: aux=%d desired=%s current_data=%r aux_state=%r",
+            aux_num,
+            state,
+            self.data.get(f"aux{aux_num}_on") if self.data else None,
+            self._aux_state.get(aux_num),
+        )
         self._schedule_write(
             f"aux{aux_num}",
             partial(self._set_aux_equipment, aux_num, state),

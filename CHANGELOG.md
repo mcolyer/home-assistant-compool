@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-06-05
+
+### Changed
+- Add targeted debug logging for Compool switch writes, bus transactions, aux status polling, and optimistic state reconciliation.
+
 ## [0.5.3] - 2026-06-05
 
 ### Fixed

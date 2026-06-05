@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-05
+
+### Fixed
+- Confirm optimistic switch state after the delayed controller re-poll so the Home Assistant UI clears its optimistic transition when hardware reports the same final state.
+
 ## [0.5.0] - 2026-06-05
 
 ### Changed

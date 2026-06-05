@@ -316,6 +316,29 @@ async def test_poll_captures_aux_state(hass: HomeAssistant) -> None:
     assert coordinator._aux_state[2] is False
 
 
+async def test_poll_clears_pending_confirmation(hass: HomeAssistant) -> None:
+    """A successful poll confirms keys that were updated optimistically."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)
+
+    with (
+        patch.object(coordinator, "_set_aux_equipment", return_value=True),
+        patch.object(
+            coordinator,
+            "_get_pool_status_with_retry",
+            return_value={**MOCK_POOL_STATUS, "aux1_on": False},
+        ),
+    ):
+        await coordinator.async_set_aux_equipment(1, False)
+        assert coordinator.is_pending_confirmation("aux1_on") is True
+
+        await coordinator._async_update_data()
+
+    assert coordinator.is_pending_confirmation("aux1_on") is False
+
+    await coordinator.async_shutdown()
+
+
 async def test_write_waits_for_bus_lock(hass: HomeAssistant) -> None:
     """A queued batch cannot reach the bus while the lock is held by a poll."""
     coordinator = _make_coordinator(hass)

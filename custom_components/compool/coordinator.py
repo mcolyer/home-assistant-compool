@@ -78,6 +78,9 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Last hardware-truth aux states from the most recent poll, used to
         # decide whether an aux toggle is needed (see _set_aux_equipment).
         self._aux_state: dict[int, bool] = {}
+        # Data keys that were updated optimistically and have not yet been
+        # observed in a successful controller poll.
+        self._pending_confirmation: set[str] = set()
 
     def _is_connection_timeout_error(self, exception: Exception) -> bool:
         """Check if the exception is a connection timeout error."""
@@ -182,6 +185,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._get_pool_status_with_retry
             )
         self._capture_aux_state(status)
+        self._clear_confirmed_keys(status)
         return status
 
     def _capture_aux_state(self, status: dict[str, Any]) -> None:
@@ -194,6 +198,14 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             value = status.get(f"aux{aux_num}_on")
             if isinstance(value, bool):
                 self._aux_state[aux_num] = value
+
+    def _clear_confirmed_keys(self, status: dict[str, Any]) -> None:
+        """Clear optimistic confirmation markers for keys present in a poll."""
+        self._pending_confirmation.difference_update(status)
+
+    def is_pending_confirmation(self, key: str) -> bool:
+        """Return whether a status key is waiting for controller confirmation."""
+        return key in self._pending_confirmation
 
     def _format_temperature_string(self, temperature: float, unit: str) -> str:
         """Format temperature and unit for pycompool API."""
@@ -241,6 +253,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self.data is None:
             return
+        self._pending_confirmation.update(updates)
         self.data.update(updates)
         self.async_set_updated_data(self.data)
 
@@ -313,6 +326,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._reconcile_unsub()
             self._reconcile_unsub = None
         self._pending_writes.clear()
+        self._pending_confirmation.clear()
         await super().async_shutdown()
 
     async def async_set_pool_temperature(

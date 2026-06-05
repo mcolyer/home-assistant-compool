@@ -221,10 +221,10 @@ async def test_aux_off_optimistic_survives_flush(hass: HomeAssistant) -> None:
     await coordinator.async_shutdown()
 
 
-async def test_reconcile_overrides_optimistic_with_real_status(
+async def test_reconcile_overrides_optimistic_after_confirmation_window(
     hass: HomeAssistant,
 ) -> None:
-    """A second stale reconcile poll resets a wrong optimistic value."""
+    """A stale reconcile poll resets a wrong optimistic value after 30 seconds."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)  # aux1_on starts True
     coordinator._aux_state = {1: True}
@@ -249,11 +249,60 @@ async def test_reconcile_overrides_optimistic_with_real_status(
         assert coordinator.data["aux1_on"] is False
         assert coordinator.is_pending_confirmation("aux1_on") is True
 
+        coordinator._pending_confirmation["aux1_on"].requested_at -= 31
         await flush_reconcile(hass)
 
-        # The controller still reports aux1 on, so accept hardware truth.
+        # The controller still reports aux1 on after the confirmation window,
+        # so accept hardware truth.
         assert coordinator.data["aux1_on"] is True
         assert coordinator.is_pending_confirmation("aux1_on") is False
+
+    await coordinator.async_shutdown()
+
+
+async def test_aux_off_survives_repeated_stale_on_polls(
+    hass: HomeAssistant,
+) -> None:
+    """An off command remains optimistic while stale on polls are within window."""
+    coordinator = _make_coordinator(hass)
+    off_status = {**MOCK_POOL_STATUS, "aux1_on": False}
+    on_status = {**MOCK_POOL_STATUS, "aux1_on": True}
+    coordinator.data = dict(off_status)
+    coordinator._aux_state = {1: False}
+
+    with (
+        patch.object(coordinator, "_set_aux_equipment", return_value=True),
+        patch.object(
+            coordinator,
+            "_get_pool_status_with_retry",
+            side_effect=[on_status, on_status, on_status, off_status],
+        ),
+    ):
+        await coordinator.async_set_aux_equipment(1, True)
+        assert coordinator.data["aux1_on"] is True
+
+        confirmed_on = await coordinator._async_update_data()
+        assert confirmed_on["aux1_on"] is True
+        assert coordinator.is_pending_confirmation("aux1_on") is False
+        assert coordinator._aux_state[1] is True
+
+        await coordinator.async_set_aux_equipment(1, False)
+        assert coordinator.data["aux1_on"] is False
+
+        first_stale = await coordinator._async_update_data()
+        assert first_stale["aux1_on"] is False
+        assert coordinator.is_pending_confirmation("aux1_on") is True
+        assert coordinator._aux_state[1] is False
+
+        second_stale = await coordinator._async_update_data()
+        assert second_stale["aux1_on"] is False
+        assert coordinator.is_pending_confirmation("aux1_on") is True
+        assert coordinator._aux_state[1] is False
+
+        confirmed_off = await coordinator._async_update_data()
+        assert confirmed_off["aux1_on"] is False
+        assert coordinator.is_pending_confirmation("aux1_on") is False
+        assert coordinator._aux_state[1] is False
 
     await coordinator.async_shutdown()
 

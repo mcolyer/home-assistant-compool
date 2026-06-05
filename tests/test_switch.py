@@ -203,10 +203,10 @@ async def test_switch_turn_off_confirms_optimistic_state(
     assert state.attributes["pending_confirmation"] is False
 
 
-async def test_switch_turn_off_reconcile_corrects_state(
+async def test_switch_turn_off_reconcile_corrects_state_after_window(
     hass: HomeAssistant,
 ) -> None:
-    """A second stale reconcile poll restores hardware truth."""
+    """A stale reconcile poll restores hardware truth after the confirmation window."""
     config_entry = MockConfigEntry(domain=DOMAIN, data=MOCK_CONFIG)
     config_entry.add_to_hass(hass)
 
@@ -255,6 +255,7 @@ async def test_switch_turn_off_reconcile_corrects_state(
         assert state.state == "off"
         assert state.attributes["pending_confirmation"] is True
 
+        coordinator._pending_confirmation["aux1_on"].requested_at -= 31
         coordinator._reconcile_unsub()
         coordinator._reconcile_unsub = None
         await coordinator._reconcile(None)
@@ -262,6 +263,92 @@ async def test_switch_turn_off_reconcile_corrects_state(
 
     state = hass.states.get(entity_id)
     assert state.state == "on"
+    assert state.attributes["pending_confirmation"] is False
+
+
+async def test_switch_off_on_off_survives_repeated_stale_on_polls(
+    hass: HomeAssistant,
+) -> None:
+    """Switch services keep an off command through repeated stale on polls."""
+    config_entry = MockConfigEntry(domain=DOMAIN, data=MOCK_CONFIG)
+    config_entry.add_to_hass(hass)
+    confirmed_on = {**MOCK_POOL_STATUS, "aux2_on": True}
+    confirmed_off = {**MOCK_POOL_STATUS, "aux2_on": False}
+
+    with patch("custom_components.compool.coordinator.PoolController") as mock_ctrl:
+        mock_ctrl.return_value.get_status.return_value = dict(MOCK_POOL_STATUS)
+        mock_ctrl.return_value.toggle_aux_equipment.return_value = True
+
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done()
+        mock_ctrl.return_value.get_status.side_effect = [
+            confirmed_on,
+            confirmed_on,
+            confirmed_on,
+            confirmed_off,
+        ]
+        mock_ctrl.return_value.get_status.return_value = None
+
+        entity_id = sorted(
+            state.entity_id
+            for state in hass.states.async_all()
+            if state.entity_id.startswith("switch.")
+        )[1]
+        coordinator = config_entry.runtime_data.coordinator
+        assert coordinator._aux_state[2] is False
+        assert hass.states.get(entity_id).state == "off"
+
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_ON,
+            {ATTR_ENTITY_ID: entity_id},
+            blocking=True,
+        )
+        coordinator._flush_unsub()
+        coordinator._flush_unsub = None
+        await coordinator._flush_batch(None)
+        coordinator._reconcile_unsub()
+        coordinator._reconcile_unsub = None
+        await coordinator._reconcile(None)
+        await hass.async_block_till_done()
+
+        state = hass.states.get(entity_id)
+        assert state.state == "on"
+        assert state.attributes["pending_confirmation"] is False
+
+        await hass.services.async_call(
+            SWITCH_DOMAIN,
+            SERVICE_TURN_OFF,
+            {ATTR_ENTITY_ID: entity_id},
+            blocking=True,
+        )
+        state = hass.states.get(entity_id)
+        assert state.state == "off"
+        assert state.attributes["pending_confirmation"] is True
+
+        coordinator._flush_unsub()
+        coordinator._flush_unsub = None
+        await coordinator._flush_batch(None)
+        assert mock_ctrl.return_value.toggle_aux_equipment.call_count == 2
+
+        for _ in range(2):
+            coordinator._reconcile_unsub()
+            coordinator._reconcile_unsub = None
+            await coordinator._reconcile(None)
+            await hass.async_block_till_done()
+
+            state = hass.states.get(entity_id)
+            assert state.state == "off"
+            assert state.attributes["pending_confirmation"] is True
+            assert coordinator._aux_state[2] is False
+
+        coordinator._reconcile_unsub()
+        coordinator._reconcile_unsub = None
+        await coordinator._reconcile(None)
+        await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
     assert state.attributes["pending_confirmation"] is False
 
 

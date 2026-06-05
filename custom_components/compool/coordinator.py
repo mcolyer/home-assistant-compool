@@ -22,6 +22,7 @@ from .const import (
     HEATER_MODES,
     KEY_POOL_HEAT_SOURCE,
     KEY_SPA_HEAT_SOURCE,
+    OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
     RECONCILE_DELAY_SECONDS,
     STATUS_SCAN_INTERVAL,
     WRITE_BATCH_INTERVAL_SECONDS,
@@ -33,6 +34,15 @@ class CompoolRuntimeData:
     """Runtime data for the Compool config entry."""
 
     coordinator: CompoolStatusDataUpdateCoordinator
+
+
+@dataclass
+class PendingConfirmation:
+    """Optimistic value waiting for a controller heartbeat to confirm it."""
+
+    expected: Any
+    requested_at: float
+    stale_reconcile_count: int = 0
 
 
 type CompoolConfigEntry = ConfigEntry[CompoolRuntimeData]
@@ -80,7 +90,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._aux_state: dict[int, bool] = {}
         # Data keys that were updated optimistically and the expected value
         # that has not yet been observed in a successful controller poll.
-        self._pending_confirmation: dict[str, tuple[Any, int]] = {}
+        self._pending_confirmation: dict[str, PendingConfirmation] = {}
 
     def _is_connection_timeout_error(self, exception: Exception) -> bool:
         """Check if the exception is a connection timeout error."""
@@ -200,24 +210,52 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._aux_state[aux_num] = value
 
     def _reconcile_pending_status(self, status: dict[str, Any]) -> dict[str, Any]:
-        """Preserve optimistic values through one stale heartbeat."""
+        """Preserve optimistic values during a bounded confirmation window."""
         if not self._pending_confirmation:
             return status
 
         reconciled_status = dict(status)
-        pending_confirmation: dict[str, tuple[Any, int]] = {}
+        pending_confirmation: dict[str, PendingConfirmation] = {}
         should_repoll = False
+        now = time.monotonic()
 
-        for key, (expected, stale_polls) in self._pending_confirmation.items():
+        for key, confirmation in self._pending_confirmation.items():
+            age = now - confirmation.requested_at
             if key not in reconciled_status:
-                pending_confirmation[key] = (expected, stale_polls)
+                if age <= OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS:
+                    pending_confirmation[key] = confirmation
+                    should_repoll = True
+                else:
+                    _LOGGER.warning(
+                        "Compool optimistic value for %s was not reported within "
+                        "%.0f seconds; expected %r, stale polls: %d",
+                        key,
+                        OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
+                        confirmation.expected,
+                        confirmation.stale_reconcile_count,
+                    )
                 continue
-            if reconciled_status[key] == expected:
+            reported = reconciled_status[key]
+            if reported == confirmation.expected:
                 continue
-            if stale_polls == 0:
-                reconciled_status[key] = expected
-                pending_confirmation[key] = (expected, stale_polls + 1)
+
+            stale_count = confirmation.stale_reconcile_count + 1
+            if age <= OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS:
+                confirmation.stale_reconcile_count = stale_count
+                reconciled_status[key] = confirmation.expected
+                pending_confirmation[key] = confirmation
                 should_repoll = True
+                continue
+
+            _LOGGER.warning(
+                "Compool optimistic value for %s was not confirmed within %.0f "
+                "seconds; expected %r, reported %r, stale polls: %d",
+                key,
+                OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
+                confirmation.expected,
+                reported,
+                stale_count,
+            )
 
         self._pending_confirmation = pending_confirmation
         if should_repoll:
@@ -275,7 +313,9 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.data is None:
             return
         for key, value in updates.items():
-            self._pending_confirmation[key] = (value, 0)
+            self._pending_confirmation[key] = PendingConfirmation(
+                expected=value, requested_at=time.monotonic()
+            )
         self.data.update(updates)
         self.async_set_updated_data(self.data)
 

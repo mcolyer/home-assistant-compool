@@ -33,6 +33,10 @@ WRITE_BATCH_INTERVAL_SECONDS = 2
 # immediate poll returns the pre-change state and snaps the UI back.
 RECONCILE_DELAY_SECONDS = 10
 
+# Maximum time to preserve an optimistic value while the controller heartbeat
+# still reports the prior state.
+OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS = 30
+
 _LOGGER = logging.getLogger(__package__)
 
 # Configuration keys

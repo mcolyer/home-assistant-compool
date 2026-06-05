@@ -78,9 +78,9 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Last hardware-truth aux states from the most recent poll, used to
         # decide whether an aux toggle is needed (see _set_aux_equipment).
         self._aux_state: dict[int, bool] = {}
-        # Data keys that were updated optimistically and have not yet been
-        # observed in a successful controller poll.
-        self._pending_confirmation: set[str] = set()
+        # Data keys that were updated optimistically and the expected value
+        # that has not yet been observed in a successful controller poll.
+        self._pending_confirmation: dict[str, tuple[Any, int]] = {}
 
     def _is_connection_timeout_error(self, exception: Exception) -> bool:
         """Check if the exception is a connection timeout error."""
@@ -184,8 +184,8 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             status = await self.hass.async_add_executor_job(
                 self._get_pool_status_with_retry
             )
+        status = self._reconcile_pending_status(status)
         self._capture_aux_state(status)
-        self._clear_confirmed_keys(status)
         return status
 
     def _capture_aux_state(self, status: dict[str, Any]) -> None:
@@ -199,9 +199,30 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if isinstance(value, bool):
                 self._aux_state[aux_num] = value
 
-    def _clear_confirmed_keys(self, status: dict[str, Any]) -> None:
-        """Clear optimistic confirmation markers for keys present in a poll."""
-        self._pending_confirmation.difference_update(status)
+    def _reconcile_pending_status(self, status: dict[str, Any]) -> dict[str, Any]:
+        """Preserve optimistic values through one stale heartbeat."""
+        if not self._pending_confirmation:
+            return status
+
+        reconciled_status = dict(status)
+        pending_confirmation: dict[str, tuple[Any, int]] = {}
+        should_repoll = False
+
+        for key, (expected, stale_polls) in self._pending_confirmation.items():
+            if key not in reconciled_status:
+                pending_confirmation[key] = (expected, stale_polls)
+                continue
+            if reconciled_status[key] == expected:
+                continue
+            if stale_polls == 0:
+                reconciled_status[key] = expected
+                pending_confirmation[key] = (expected, stale_polls + 1)
+                should_repoll = True
+
+        self._pending_confirmation = pending_confirmation
+        if should_repoll:
+            self._schedule_reconcile()
+        return reconciled_status
 
     def is_pending_confirmation(self, key: str) -> bool:
         """Return whether a status key is waiting for controller confirmation."""
@@ -253,7 +274,8 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self.data is None:
             return
-        self._pending_confirmation.update(updates)
+        for key, value in updates.items():
+            self._pending_confirmation[key] = (value, 0)
         self.data.update(updates)
         self.async_set_updated_data(self.data)
 
@@ -315,7 +337,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _reconcile(self, _now: Any) -> None:
         """Poll the controller to overwrite optimistic state with real status."""
         self._reconcile_unsub = None
-        await self.async_request_refresh()
+        await self.async_refresh()
 
     async def async_shutdown(self) -> None:
         """Cancel any pending batched write and reconcile poll on unload."""

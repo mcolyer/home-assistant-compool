@@ -174,9 +174,7 @@ async def test_batch_reconciles_after_delay(hass: HomeAssistant) -> None:
     coordinator.data = dict(MOCK_POOL_STATUS)
 
     with (
-        patch.object(
-            coordinator, "async_request_refresh", new=AsyncMock()
-        ) as mock_refresh,
+        patch.object(coordinator, "async_refresh", new=AsyncMock()) as mock_refresh,
         patch.object(coordinator, "_set_pool_temperature", return_value=True),
     ):
         await coordinator.async_set_pool_temperature(90, "f")
@@ -226,7 +224,7 @@ async def test_aux_off_optimistic_survives_flush(hass: HomeAssistant) -> None:
 async def test_reconcile_overrides_optimistic_with_real_status(
     hass: HomeAssistant,
 ) -> None:
-    """The delayed reconcile poll resets a wrong optimistic value to hardware truth."""
+    """A second stale reconcile poll resets a wrong optimistic value."""
     coordinator = _make_coordinator(hass)
     coordinator.data = dict(MOCK_POOL_STATUS)  # aux1_on starts True
     coordinator._aux_state = {1: True}
@@ -246,9 +244,16 @@ async def test_reconcile_overrides_optimistic_with_real_status(
         await flush_writes(hass)
         await flush_reconcile(hass)
 
-        # The heartbeat still reports aux1 on, so the reconcile poll resets the
-        # optimistic off back to the real state.
+        # One stale heartbeat is ignored so the UI does not snap back before the
+        # controller has had a fair chance to report the new state.
+        assert coordinator.data["aux1_on"] is False
+        assert coordinator.is_pending_confirmation("aux1_on") is True
+
+        await flush_reconcile(hass)
+
+        # The controller still reports aux1 on, so accept hardware truth.
         assert coordinator.data["aux1_on"] is True
+        assert coordinator.is_pending_confirmation("aux1_on") is False
 
     await coordinator.async_shutdown()
 
@@ -335,6 +340,37 @@ async def test_poll_clears_pending_confirmation(hass: HomeAssistant) -> None:
         await coordinator._async_update_data()
 
     assert coordinator.is_pending_confirmation("aux1_on") is False
+
+    await coordinator.async_shutdown()
+
+
+async def test_stale_poll_preserves_optimistic_on(hass: HomeAssistant) -> None:
+    """An off-to-on command is not undone by one stale off heartbeat."""
+    coordinator = _make_coordinator(hass)
+    off_status = {**MOCK_POOL_STATUS, "aux1_on": False}
+    on_status = {**MOCK_POOL_STATUS, "aux1_on": True}
+    coordinator.data = dict(off_status)
+    coordinator._aux_state = {1: False}
+
+    with (
+        patch.object(coordinator, "_set_aux_equipment", return_value=True),
+        patch.object(
+            coordinator,
+            "_get_pool_status_with_retry",
+            side_effect=[off_status, on_status],
+        ),
+    ):
+        await coordinator.async_set_aux_equipment(1, True)
+        assert coordinator.data["aux1_on"] is True
+
+        stale = await coordinator._async_update_data()
+        assert stale["aux1_on"] is True
+        assert coordinator._aux_state[1] is True
+        assert coordinator.is_pending_confirmation("aux1_on") is True
+
+        confirmed = await coordinator._async_update_data()
+        assert confirmed["aux1_on"] is True
+        assert coordinator.is_pending_confirmation("aux1_on") is False
 
     await coordinator.async_shutdown()
 

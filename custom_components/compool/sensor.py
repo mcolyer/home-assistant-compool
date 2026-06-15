@@ -14,8 +14,8 @@ from homeassistant.helpers.typing import StateType
 
 from .const import (
     KEY_FIRMWARE,
-    KEY_HEAT_SOURCE,
     KEY_POOL_AIR_TEMP,
+    KEY_POOL_HEAT_SOURCE,
     KEY_POOL_WATER_TEMP,
     KEY_SOLAR_COLLECTOR_TEMP,
     KEY_SPA_HEAT_SOURCE,
@@ -133,7 +133,7 @@ class CompoolSensor(CompoolEntity, SensorEntity):
         elif sensor_key == "pool_controller_time":
             return status.get(KEY_TIME)
         elif sensor_key == "pool_heat_source":
-            return status.get(KEY_HEAT_SOURCE)
+            return status.get(KEY_POOL_HEAT_SOURCE)
         elif sensor_key == "spa_heat_source":
             return status.get(KEY_SPA_HEAT_SOURCE)
         elif sensor_key == "pool_water_temperature":

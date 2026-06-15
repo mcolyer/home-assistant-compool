@@ -2,17 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 import time
 from typing import Any
 
 from pycompool import PoolController
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import _LOGGER, DOMAIN, STATUS_SCAN_INTERVAL
+from .const import (
+    _LOGGER,
+    DOMAIN,
+    HEATER_MODES,
+    KEY_POOL_HEAT_SOURCE,
+    KEY_SPA_HEAT_SOURCE,
+    OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
+    RECONCILE_DELAY_SECONDS,
+    STATUS_SCAN_INTERVAL,
+    WRITE_BATCH_INTERVAL_SECONDS,
+)
 
 
 @dataclass
@@ -20,6 +34,23 @@ class CompoolRuntimeData:
     """Runtime data for the Compool config entry."""
 
     coordinator: CompoolStatusDataUpdateCoordinator
+
+
+@dataclass
+class PendingConfirmation:
+    """Optimistic value waiting for a controller heartbeat to confirm it."""
+
+    expected: Any
+    requested_at: float
+    stale_reconcile_count: int = 0
+
+
+@dataclass
+class PendingWrite:
+    """Queued controller write and optimistic keys it should confirm."""
+
+    send: Callable[[], bool]
+    confirmation_keys: tuple[str, ...]
 
 
 type CompoolConfigEntry = ConfigEntry[CompoolRuntimeData]
@@ -52,6 +83,23 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._consecutive_failures = 0
         self._last_failure_time = 0
 
+        # Serialize every transaction on the half-duplex RS485 bus: only one
+        # poll or write may touch the controller at a time.
+        self._io_lock = asyncio.Lock()
+        # Batched writes: changes accumulate in the queue (latest value per
+        # field wins) and the whole batch is flushed once, a single collect
+        # window after the first queued change.
+        self._pending_writes: dict[str, PendingWrite] = {}
+        self._flush_unsub: CALLBACK_TYPE | None = None
+        # Pending delayed reconcile poll scheduled after a batch is sent.
+        self._reconcile_unsub: CALLBACK_TYPE | None = None
+        # Last hardware-truth aux states from the most recent poll, used to
+        # decide whether an aux toggle is needed (see _set_aux_equipment).
+        self._aux_state: dict[int, bool] = {}
+        # Data keys that were updated optimistically and the expected value
+        # that has not yet been observed in a successful controller poll.
+        self._pending_confirmation: dict[str, PendingConfirmation] = {}
+
     def _is_connection_timeout_error(self, exception: Exception) -> bool:
         """Check if the exception is a connection timeout error."""
         error_msg = str(exception).lower()
@@ -69,10 +117,29 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Raise UpdateFailed for no status data."""
         raise UpdateFailed("No status data received from pool controller")
 
+    def _normalize_heat_sources(self, status: dict[str, Any]) -> dict[str, Any]:
+        """Convert pycompool integer heat-source codes (0-3) to mode strings.
+
+        pycompool reports ``pool_heat_source``/``spa_heat_source`` as integers
+        (0=off, 1=heater, 2=solar-priority, 3=solar-only), index-aligned with
+        HEATER_MODES. Entities expect the string mode, so normalize in place.
+        """
+        for key in (KEY_POOL_HEAT_SOURCE, KEY_SPA_HEAT_SOURCE):
+            raw = status.get(key)
+            if isinstance(raw, int) and 0 <= raw < len(HEATER_MODES):
+                status[key] = HEATER_MODES[raw]
+            elif raw not in HEATER_MODES:
+                # Already-normalized strings pass through; anything else is unexpected.
+                _LOGGER.debug("Unexpected %s value from controller: %r", key, raw)
+                status[key] = None
+        return status
+
     def _get_pool_status_with_retry(self) -> dict[str, Any]:
         """Get pool controller status with retry logic for connection failures."""
-        max_retries = 5
-        base_delay = 3  # seconds
+        # Keep retries minimal: this runs while holding the bus lock (blocking
+        # user commands), and the coordinator already re-polls every 30s.
+        max_retries = 1
+        base_delay = 1  # seconds
 
         for attempt in range(max_retries + 1):
             try:
@@ -87,7 +154,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if not status:
                     self._raise_no_status_error()
                 else:
-                    return status
+                    return self._normalize_heat_sources(status)
 
             except Exception as ex:
                 if attempt < max_retries and self._is_connection_timeout_error(ex):
@@ -131,7 +198,81 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update pool controller status."""
-        return await self.hass.async_add_executor_job(self._get_pool_status_with_retry)
+        async with self._io_lock:
+            status = await self.hass.async_add_executor_job(
+                self._get_pool_status_with_retry
+            )
+        status = self._reconcile_pending_status(status)
+        self._capture_aux_state(status)
+        return status
+
+    def _capture_aux_state(self, status: dict[str, Any]) -> None:
+        """Record the hardware-truth aux states reported by a poll.
+
+        This baseline is independent of the in-place optimistic mutation of
+        ``self.data`` and drives the toggle decision in _set_aux_equipment.
+        """
+        for aux_num in range(1, 9):
+            value = status.get(f"aux{aux_num}_on")
+            if isinstance(value, bool):
+                self._aux_state[aux_num] = value
+
+    def _reconcile_pending_status(self, status: dict[str, Any]) -> dict[str, Any]:
+        """Preserve optimistic values during a bounded confirmation window."""
+        if not self._pending_confirmation:
+            return status
+
+        reconciled_status = dict(status)
+        pending_confirmation: dict[str, PendingConfirmation] = {}
+        should_repoll = False
+        now = time.monotonic()
+
+        for key, confirmation in self._pending_confirmation.items():
+            age = now - confirmation.requested_at
+            if key not in reconciled_status:
+                if age <= OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS:
+                    pending_confirmation[key] = confirmation
+                    should_repoll = True
+                else:
+                    _LOGGER.warning(
+                        "Compool optimistic value for %s was not reported within "
+                        "%.0f seconds; expected %r, stale polls: %d",
+                        key,
+                        OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
+                        confirmation.expected,
+                        confirmation.stale_reconcile_count,
+                    )
+                continue
+            reported = reconciled_status[key]
+            if reported == confirmation.expected:
+                continue
+
+            stale_count = confirmation.stale_reconcile_count + 1
+            if age <= OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS:
+                confirmation.stale_reconcile_count = stale_count
+                reconciled_status[key] = confirmation.expected
+                pending_confirmation[key] = confirmation
+                should_repoll = True
+                continue
+
+            _LOGGER.warning(
+                "Compool optimistic value for %s was not confirmed within %.0f "
+                "seconds; expected %r, reported %r, stale polls: %d",
+                key,
+                OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
+                confirmation.expected,
+                reported,
+                stale_count,
+            )
+
+        self._pending_confirmation = pending_confirmation
+        if should_repoll:
+            self._schedule_reconcile()
+        return reconciled_status
+
+    def is_pending_confirmation(self, key: str) -> bool:
+        """Return whether a status key is waiting for controller confirmation."""
+        return key in self._pending_confirmation
 
     def _format_temperature_string(self, temperature: float, unit: str) -> str:
         """Format temperature and unit for pycompool API."""
@@ -169,39 +310,168 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.error("Error setting heater mode: %s", ex)
             return False
 
+    def _apply_optimistic(self, updates: dict[str, Any]) -> None:
+        """Reflect a just-requested change in the UI before the next poll.
+
+        Calling async_set_updated_data also pushes the periodic poll out, so a
+        near-term heartbeat (still showing the old value) can't snap the UI
+        back. The optimistic value is reconciled by the delayed reconcile poll
+        scheduled after the write completes (see _schedule_reconcile).
+        """
+        if self.data is None:
+            return
+        for key, value in updates.items():
+            self._pending_confirmation[key] = PendingConfirmation(
+                expected=value, requested_at=time.monotonic()
+            )
+        self.data.update(updates)
+        self.async_set_updated_data(self.data)
+
+    def _mark_write_completed(self, confirmation_keys: tuple[str, ...]) -> None:
+        """Start confirmation windows when a write reaches the controller."""
+        confirmed_at = time.monotonic()
+        for key in confirmation_keys:
+            confirmation = self._pending_confirmation.get(key)
+            if confirmation is None:
+                continue
+            confirmation.requested_at = confirmed_at
+            confirmation.stale_reconcile_count = 0
+
+    @callback
+    def _schedule_write(
+        self,
+        field: str,
+        send: Callable[[], bool],
+        optimistic: dict[str, Any],
+    ) -> None:
+        """Optimistically update the UI and queue the hardware write.
+
+        Changes accumulate in a single batch (the latest value per field wins).
+        The first queued change arms one flush timer; later changes within the
+        collect window join the same batch without pushing the timer out, so the
+        whole batch is sent to the controller at once.
+        """
+        self._apply_optimistic(optimistic)
+        self._pending_writes[field] = PendingWrite(send, tuple(optimistic))
+        if self._flush_unsub is None:
+            self._flush_unsub = async_call_later(
+                self.hass, WRITE_BATCH_INTERVAL_SECONDS, self._flush_batch
+            )
+
+    async def _flush_batch(self, _now: Any) -> None:
+        """Send the whole queued batch to the controller, then reconcile.
+
+        Every queued write is sent sequentially under a single bus-lock hold so
+        the half-duplex RS485 bus is never contended. Afterwards a single
+        delayed reconcile poll is scheduled (see _schedule_reconcile) to replace
+        the optimistic state with the real heartbeat once it has caught up.
+        """
+        self._flush_unsub = None
+        batch = self._pending_writes
+        self._pending_writes = {}
+        if not batch:
+            return
+        async with self._io_lock:
+            for field, pending_write in batch.items():
+                success = await self.hass.async_add_executor_job(pending_write.send)
+                if success:
+                    self._mark_write_completed(pending_write.confirmation_keys)
+                if not success:
+                    _LOGGER.error("Compool write for %s failed", field)
+        self._schedule_reconcile()
+
+    @callback
+    def _schedule_reconcile(self) -> None:
+        """Re-poll once, a few seconds out, to reconcile the optimistic state.
+
+        The controller only reflects a just-sent command on a later heartbeat,
+        so we wait past that lag before reading - an immediate poll would return
+        the pre-change state and snap the UI back. The latest reconcile wins.
+        """
+        if self._reconcile_unsub is not None:
+            self._reconcile_unsub()
+        self._reconcile_unsub = async_call_later(
+            self.hass, RECONCILE_DELAY_SECONDS, self._reconcile
+        )
+
+    async def _reconcile(self, _now: Any) -> None:
+        """Poll the controller to overwrite optimistic state with real status."""
+        self._reconcile_unsub = None
+        await self.async_refresh()
+
+    async def async_shutdown(self) -> None:
+        """Cancel any pending batched write and reconcile poll on unload."""
+        if self._flush_unsub is not None:
+            self._flush_unsub()
+            self._flush_unsub = None
+        if self._reconcile_unsub is not None:
+            self._reconcile_unsub()
+            self._reconcile_unsub = None
+        self._pending_writes.clear()
+        self._pending_confirmation.clear()
+        await super().async_shutdown()
+
     async def async_set_pool_temperature(
         self, temperature: float, unit: str = "f"
-    ) -> bool:
+    ) -> None:
         """Set pool temperature."""
-        return await self.hass.async_add_executor_job(
-            self._set_pool_temperature, temperature, unit
+        temp_f = temperature if unit.lower() == "f" else round(temperature * 9 / 5 + 32)
+        self._schedule_write(
+            "pool_temp",
+            partial(self._set_pool_temperature, temperature, unit),
+            {"desired_pool_temp_f": float(temp_f)},
         )
 
     async def async_set_spa_temperature(
         self, temperature: float, unit: str = "f"
-    ) -> bool:
+    ) -> None:
         """Set spa temperature."""
-        return await self.hass.async_add_executor_job(
-            self._set_spa_temperature, temperature, unit
+        temp_f = temperature if unit.lower() == "f" else round(temperature * 9 / 5 + 32)
+        self._schedule_write(
+            "spa_temp",
+            partial(self._set_spa_temperature, temperature, unit),
+            {"desired_spa_temp_f": float(temp_f)},
         )
 
-    async def async_set_heater_mode(self, mode: str, target: str) -> bool:
+    async def async_set_heater_mode(self, mode: str, target: str) -> None:
         """Set heater mode."""
-        return await self.hass.async_add_executor_job(
-            self._set_heater_mode, mode, target
+        key = KEY_POOL_HEAT_SOURCE if target == "pool" else KEY_SPA_HEAT_SOURCE
+        self._schedule_write(
+            f"heat_{target}",
+            partial(self._set_heater_mode, mode, target),
+            {key: mode},
         )
 
     def _set_aux_equipment(self, aux_num: int, state: bool) -> bool:
-        """Set auxiliary equipment state using pycompool."""
+        """Drive an aux circuit to the requested state.
+
+        The hardware only supports *toggling* a circuit. pycompool's
+        set_aux_equipment guards the toggle with its own fresh heartbeat read,
+        which lags the real state and silently drops the toggle (notably for
+        "off", where a stale "already off" read matches the request). Instead we
+        decide here against the last polled state (self._aux_state) and send an
+        unconditional toggle only when it differs, so the command never depends
+        on a single lagging heartbeat read.
+        """
+        current = self._aux_state.get(aux_num)
+        if current == state:
+            # Already in the requested state per the last poll; nothing to do.
+            return True
         try:
             controller = PoolController(self._device, 9600)
-            return controller.set_aux_equipment(aux_num, state)
+            success = controller.toggle_aux_equipment(aux_num)
         except Exception as ex:
             _LOGGER.error("Error setting aux%d equipment: %s", aux_num, ex)
             return False
+        if success:
+            # Reflect the toggle so a later change in the same window is correct.
+            self._aux_state[aux_num] = state
+        return success
 
-    async def async_set_aux_equipment(self, aux_num: int, state: bool) -> bool:
+    async def async_set_aux_equipment(self, aux_num: int, state: bool) -> None:
         """Set auxiliary equipment state."""
-        return await self.hass.async_add_executor_job(
-            self._set_aux_equipment, aux_num, state
+        self._schedule_write(
+            f"aux{aux_num}",
+            partial(self._set_aux_equipment, aux_num, state),
+            {f"aux{aux_num}_on": state},
         )

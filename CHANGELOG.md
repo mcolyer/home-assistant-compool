@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-05
+
+### Changed
+- Reconcile optimistic writes 5 seconds after the controller write completes so switch confirmations clear faster while still avoiding stale heartbeat snap-back.
+- Start the 30-second stale-read guard from successful write completion instead of the initial UI request.
+- Stop exposing the internal switch confirmation guard as a Home Assistant state attribute.
+
+## [0.5.4] - 2026-06-05
+
+### Changed
+- Add targeted debug logging for Compool switch writes, bus transactions, aux status polling, and optimistic state reconciliation.
+
+## [0.5.3] - 2026-06-05
+
+### Fixed
+- Preserve optimistic switch state for up to 30 seconds so slower stale controller heartbeats do not snap switches back after direction changes.
+
+## [0.5.2] - 2026-06-05
+
+### Fixed
+- Preserve optimistic switch state through one stale reconcile poll so off-to-on changes do not snap back before the controller heartbeat catches up.
+
+## [0.5.1] - 2026-06-05
+
+### Fixed
+- Confirm optimistic switch state after the delayed controller re-poll so the Home Assistant UI clears its optimistic transition when hardware reports the same final state.
+
+## [0.5.0] - 2026-06-05
+
+### Changed
+- Increase reconcile delay from 5s to 10s to accommodate controllers with slower heartbeat cadences
+
+## [0.4.4] - 2026-06-05
+
+### Fixed
+- Reconcile optimistic control state with the controller within a few seconds of a change. v0.4.3 removed the immediate (stale) re-poll but then relied on the periodic poll, which `async_set_updated_data` pushes ~30s out, so a wrong optimistic value (e.g. an unacknowledged write) could linger. The batch flush now schedules a single delayed reconcile poll (just past the controller's ~2.5s heartbeat cadence) that overwrites the optimistic state with the real heartbeat without snapping back.
+
+## [0.4.3] - 2026-06-05
+
+### Fixed
+- Fix the UI snapping a switch back to its previous state right after a change (and the resulting aux toggle desync): the post-write reconcile poll read the controller's heartbeat before it had caught up, so the stale value overwrote the correct optimistic state. The batch flush no longer re-polls immediately; the optimistic value stands until the next scheduled poll, by which time the heartbeat reflects the change.
+
+## [0.4.2] - 2026-06-05
+
+### Fixed
+- Fix aux switches (e.g. pool lights) silently failing to turn **off**: pycompool's `set_aux_equipment` guarded its toggle with a lagging heartbeat read that matched the "off" request and skipped the command, so the UI showed off optimistically then snapped back on at the next poll. The integration now tracks the last polled aux state and sends an unconditional `toggle_aux_equipment` only when the desired state differs.
+
+### Changed
+- Replace the per-field write debounce with a single batched write queue: optimistic changes accumulate and the whole batch is sent to the controller once per collect window, followed by one reconciling refresh
+
+## [0.4.1] - 2026-06-04
+
+### Fixed
+- Fix rapid successive changes (temperature, heater mode, aux switches) getting lost or snapping back by serializing all controller access behind a bus lock, applying optimistic state updates, and removing the stale immediate re-poll after each write
+- Coalesce rapid same-field writes (e.g. temperature slider drags) behind a short debounce so only the final value is sent to the controller instead of flooding the RS485 bus
+
+## [0.4.0] - 2026-06-04
+
+### Fixed
+- Fix pool/spa heater mode selects and heat source sensors showing "unknown" by mapping pycompool's integer heat-source codes (0-3) to mode strings in the coordinator
+
 ## [0.3.0] - 2025-09-29
 
 ### Fixed
@@ -30,6 +91,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical Details
 - Updated pycompool from v0.1.2 to v0.2.1 with dependency management improvements
 - All existing functionality remains the same with enhanced stability
+
+## [0.2.1] - 2025-06-23
+
+### Fixed
+- Fix entity device name error that prevented proper device registration and entity organization
 
 ## [0.2.0] - 2025-06-23
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.components.number import (
     NumberEntity,
     NumberEntityDescription,
@@ -16,8 +14,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import TEMP_MAX_F, TEMP_MIN_F
 from .coordinator import CompoolConfigEntry, CompoolStatusDataUpdateCoordinator
 from .entity import CompoolEntity
-
-_LOGGER = logging.getLogger(__name__)
 
 COMPOOL_NUMBER_ENTITIES: tuple[NumberEntityDescription, ...] = (
     NumberEntityDescription(
@@ -92,12 +88,7 @@ class CompoolPoolTargetTemperatureNumber(CompoolEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set pool target temperature."""
-        success = await self.coordinator.async_set_pool_temperature(value, "f")
-        if success:
-            # Trigger a coordinator update to refresh data
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error("Failed to set pool target temperature to %s°F", value)
+        await self.coordinator.async_set_pool_temperature(value, "f")
 
 
 class CompoolSpaTargetTemperatureNumber(CompoolEntity, NumberEntity):
@@ -122,9 +113,4 @@ class CompoolSpaTargetTemperatureNumber(CompoolEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set spa target temperature."""
-        success = await self.coordinator.async_set_spa_temperature(value, "f")
-        if success:
-            # Trigger a coordinator update to refresh data
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error("Failed to set spa target temperature to %s°F", value)
+        await self.coordinator.async_set_spa_temperature(value, "f")

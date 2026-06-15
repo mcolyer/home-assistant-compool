@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import HEATER_MODES
+from .const import HEATER_MODES, KEY_POOL_HEAT_SOURCE, KEY_SPA_HEAT_SOURCE
 from .coordinator import CompoolConfigEntry, CompoolStatusDataUpdateCoordinator
 from .entity import CompoolEntity
-
-_LOGGER = logging.getLogger(__name__)
 
 COMPOOL_SELECT_ENTITIES: tuple[SelectEntityDescription, ...] = (
     SelectEntityDescription(
@@ -73,17 +69,12 @@ class CompoolPoolHeaterModeSelect(CompoolEntity, SelectEntity):
         if self.coordinator.data is None:
             return None
 
-        # Read heat source configuration directly from status data
-        return self.coordinator.data.get("heat_source")
+        # Read normalized heat source configuration from status data
+        return self.coordinator.data.get(KEY_POOL_HEAT_SOURCE)
 
     async def async_select_option(self, option: str) -> None:
         """Set pool heater mode."""
-        success = await self.coordinator.async_set_heater_mode(option, "pool")
-        if success:
-            # Trigger a coordinator update to refresh data
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error("Failed to set pool heater mode to %s", option)
+        await self.coordinator.async_set_heater_mode(option, "pool")
 
 
 class CompoolSpaHeaterModeSelect(CompoolEntity, SelectEntity):
@@ -104,14 +95,9 @@ class CompoolSpaHeaterModeSelect(CompoolEntity, SelectEntity):
         if self.coordinator.data is None:
             return None
 
-        # Read spa heat source configuration directly from status data
-        return self.coordinator.data.get("spa_heat_source")
+        # Read normalized spa heat source configuration from status data
+        return self.coordinator.data.get(KEY_SPA_HEAT_SOURCE)
 
     async def async_select_option(self, option: str) -> None:
         """Set spa heater mode."""
-        success = await self.coordinator.async_set_heater_mode(option, "spa")
-        if success:
-            # Trigger a coordinator update to refresh data
-            await self.coordinator.async_request_refresh()
-        else:
-            _LOGGER.error("Failed to set spa heater mode to %s", option)
+        await self.coordinator.async_set_heater_mode(option, "spa")

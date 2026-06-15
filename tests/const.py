@@ -1,8 +1,36 @@
 """Constants for Compool tests."""
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from datetime import timedelta
 
-from custom_components.compool.const import DOMAIN
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
+
+from custom_components.compool.const import (
+    DOMAIN,
+    RECONCILE_DELAY_SECONDS,
+    WRITE_BATCH_INTERVAL_SECONDS,
+)
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+
+
+async def flush_writes(hass: HomeAssistant) -> None:
+    """Advance time past the batch window so the queued write batch is sent."""
+    async_fire_time_changed(
+        hass, dt_util.utcnow() + timedelta(seconds=WRITE_BATCH_INTERVAL_SECONDS + 1)
+    )
+    await hass.async_block_till_done()
+
+
+async def flush_reconcile(hass: HomeAssistant) -> None:
+    """Advance time past the post-write reconcile delay so the re-poll fires."""
+    async_fire_time_changed(
+        hass, dt_util.utcnow() + timedelta(seconds=RECONCILE_DELAY_SECONDS + 1)
+    )
+    await hass.async_block_till_done()
+
 
 MOCK_CONFIG = {"host": "192.168.1.100", "port": 8899}
 
@@ -18,8 +46,8 @@ MOCK_POOL_STATUS = {
     "pool_solar_temp_f": 95.3,  # This is the solar collector temp
     "desired_pool_temp_f": 80.0,  # Target pool temperature
     "desired_spa_temp_f": 104.0,  # Target spa temperature
-    "heat_source": "heater",  # Pool heat mode configuration
-    "spa_heat_source": "solar-priority",  # Spa heat mode configuration
+    "pool_heat_source": 1,  # Pool heat mode code (int): 1 -> heater
+    "spa_heat_source": 2,  # Spa heat mode code (int): 2 -> solar-priority
     "heater_on": True,  # Boolean: heater actively running
     "solar_on": False,
     "heat_delay_active": False,

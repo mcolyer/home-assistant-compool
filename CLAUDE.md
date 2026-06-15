@@ -50,9 +50,11 @@ The integration utilizes pycompool APIs:
 ### Important API Data Structure Notes
 - **Firmware Version**: pycompool returns `"version"` key (integer), not `"firmware"`
 - **Heat Source Configuration**:
-  - `heat_source`: Pool heat mode configuration (`'heater'`, `'solar-priority'`, `'solar-only'`, or `'off'`)
-  - `spa_heat_source`: Spa heat mode configuration (`'heater'`, `'solar-priority'`, `'solar-only'`, or `'off'`)
+  - `pool_heat_source`: Pool heat mode code returned as an **integer 0-3** (`0=off`, `1=heater`, `2=solar-priority`, `3=solar-only`)
+  - `spa_heat_source`: Spa heat mode code returned as an **integer 0-3** (same encoding)
+  - These integers are index-aligned with `HEATER_MODES` in const.py; the coordinator's `_normalize_heat_sources()` converts them to mode strings before entities consume them
   - These fields indicate the *configured* heating mode, not the current active state
+  - Note: there is **no** `heat_source` key — older docs/code assumed string values under that key, which caused selects/sensors to read "unknown"
 - **Heater Active Status**:
   - `heater_on`: Boolean indicating whether the heater is *actively running* right now
   - This is separate from the configured heat mode
@@ -137,7 +139,7 @@ The integration includes a comprehensive test suite using pytest with Home Assis
 - **"Unknown" Values**: Check const.py KEY_* constants match pycompool field names exactly
 - **Field Name Quirks**:
   - pycompool uses `"version"` not `"firmware"` for firmware version
-  - `heat_source`/`spa_heat_source` are configured modes (strings), `heater_on` is active status (boolean)
+  - `pool_heat_source`/`spa_heat_source` are configured modes returned as integers 0-3 (mapped via `HEATER_MODES`); `heater_on` is active status (boolean)
   - Temperature fields: inconsistent _f suffix (e.g., `air_temp_f` but `spa_solar_temp`)
   - Time format: "HH:MM" string, not ISO timestamp
 - **Testing**: Use `uv run python -c "..."` for testing pycompool API directly

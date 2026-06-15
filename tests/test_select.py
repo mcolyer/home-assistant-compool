@@ -6,7 +6,7 @@ from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_OPTION
 from homeassistant.core import HomeAssistant
 
-from .const import MOCK_CONFIG_ENTRY
+from .const import MOCK_CONFIG_ENTRY, flush_writes
 
 
 async def test_select_setup(hass: HomeAssistant, bypass_get_data) -> None:
@@ -65,7 +65,7 @@ async def test_pool_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> N
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
-    # Based on MOCK_POOL_STATUS heat_source="heater"
+    # Based on MOCK_POOL_STATUS pool_heat_source=1 -> "heater"
     assert state.state == "heater"
     assert "off" in state.attributes["options"]
     assert "heater" in state.attributes["options"]
@@ -91,7 +91,7 @@ async def test_spa_heater_mode_value(hass: HomeAssistant, bypass_get_data) -> No
     if state is None:
         # Skip test if entity not created (platform loading issue)
         return
-    # Based on MOCK_POOL_STATUS spa_heat_source="solar-priority"
+    # Based on MOCK_POOL_STATUS spa_heat_source=2 -> "solar-priority"
     assert state.state == "solar-priority"
 
 
@@ -127,6 +127,7 @@ async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> Non
             },
             blocking=True,
         )
+        await flush_writes(hass)
 
         mock_set_mode.assert_called_once_with("solar-priority", "pool")
 
@@ -163,5 +164,6 @@ async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None
             },
             blocking=True,
         )
+        await flush_writes(hass)
 
         mock_set_mode.assert_called_once_with("heater", "spa")

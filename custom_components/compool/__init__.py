@@ -66,7 +66,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: CompoolConfigEntry) -> 
     # Unregister services
     async_unregister_services(hass)
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        await entry.runtime_data.coordinator.async_shutdown()
+    return unload_ok
 
 
 def async_register_services(

@@ -1,5 +1,7 @@
 """Test Compool setup process."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -25,7 +27,14 @@ async def test_setup_entry(hass: HomeAssistant):
     assert config_entry.runtime_data.coordinator is not None
 
     # Test unload
-    assert await hass.config_entries.async_unload(config_entry.entry_id)
+    coordinator = config_entry.runtime_data.coordinator
+    with patch.object(
+        coordinator,
+        "async_shutdown",
+        new=AsyncMock(wraps=coordinator.async_shutdown),
+    ) as mock_shutdown:
+        assert await hass.config_entries.async_unload(config_entry.entry_id)
+        mock_shutdown.assert_awaited_once()
     assert config_entry.state is ConfigEntryState.NOT_LOADED
 
 

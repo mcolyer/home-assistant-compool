@@ -36,6 +36,10 @@ RECONCILE_DELAY_SECONDS = 5
 # still reports the prior state.
 OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS = 30
 
+# A single controller status read must finish within this overall deadline,
+# even when unrelated serial traffic keeps arriving.
+STATUS_READ_TIMEOUT_SECONDS = 4
+
 _LOGGER = logging.getLogger(__package__)
 
 # Configuration keys

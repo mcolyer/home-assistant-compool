@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Prevent repeated auxiliary requests from sending another toggle while the prior hardware outcome is unresolved.
+- Compose pool and spa heater modes into one shared protocol-field update so stale reads cannot erase the other setting.
+- Validate acknowledgment checksums and enforce overall monotonic read and write deadlines.
+- Compare temperature confirmations using the controller's quarter-degree Celsius encoding.
+- Keep queued values replaceable until the command worker owns the bus, preserve confirmation generations, and stop coordinator work during unload.
+
 ## [0.6.2] - 2026-09-11
 
 ### Fixed

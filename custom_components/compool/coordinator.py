@@ -10,6 +10,7 @@ import time
 from typing import Any
 
 from pycompool import PoolController
+from pycompool.protocol import create_command_packet
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
@@ -24,9 +25,11 @@ from .const import (
     KEY_SPA_HEAT_SOURCE,
     OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS,
     RECONCILE_DELAY_SECONDS,
+    STATUS_READ_TIMEOUT_SECONDS,
     STATUS_SCAN_INTERVAL,
     WRITE_BATCH_INTERVAL_SECONDS,
 )
+from .transport import ReliableSerialConnection
 
 
 @dataclass
@@ -43,6 +46,7 @@ class PendingConfirmation:
     expected: Any
     requested_at: float
     stale_reconcile_count: int = 0
+    generation: int = 0
 
 
 @dataclass
@@ -50,7 +54,7 @@ class PendingWrite:
     """Queued controller write and optimistic keys it should confirm."""
 
     send: Callable[[], bool]
-    confirmation_keys: tuple[str, ...]
+    confirmation_generations: dict[str, int]
 
 
 type CompoolConfigEntry = ConfigEntry[CompoolRuntimeData]
@@ -99,6 +103,18 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Data keys that were updated optimistically and the expected value
         # that has not yet been observed in a successful controller poll.
         self._pending_confirmation: dict[str, PendingConfirmation] = {}
+        self._generation = 0
+        # Toggle commands are never retried while their hardware outcome is
+        # unresolved. The latest desired state is retained for a later poll.
+        self._aux_desired: dict[int, bool] = {}
+        self._aux_unresolved: dict[int, PendingConfirmation] = {}
+        self._heat_source_byte = 0
+
+    def _new_controller(self) -> PoolController:
+        """Create a controller using the integration's bounded transport."""
+        controller = PoolController(self._device, 9600)
+        controller.connection = ReliableSerialConnection(self._device, 9600)
+        return controller
 
     def _is_connection_timeout_error(self, exception: Exception) -> bool:
         """Check if the exception is a connection timeout error."""
@@ -143,8 +159,8 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         for attempt in range(max_retries + 1):
             try:
-                controller = PoolController(self._device, 9600)
-                status = controller.get_status()
+                controller = self._new_controller()
+                status = controller.get_status(timeout=STATUS_READ_TIMEOUT_SECONDS)
                 # Controller automatically disconnects after get_status
 
                 # Reset failure tracking on success
@@ -154,6 +170,9 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if not status:
                     self._raise_no_status_error()
                 else:
+                    raw_heat_source = status.get("delay_heat_source_byte")
+                    if isinstance(raw_heat_source, int):
+                        self._heat_source_byte = raw_heat_source
                     return self._normalize_heat_sources(status)
 
             except Exception as ex:
@@ -216,6 +235,18 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             value = status.get(f"aux{aux_num}_on")
             if isinstance(value, bool):
                 self._aux_state[aux_num] = value
+                unresolved = self._aux_unresolved.get(aux_num)
+                if unresolved is None:
+                    continue
+                expired = (
+                    time.monotonic() - unresolved.requested_at
+                    > OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS
+                )
+                if value == unresolved.expected or expired:
+                    self._aux_unresolved.pop(aux_num, None)
+                    desired = self._aux_desired.get(aux_num, value)
+                    if desired != value:
+                        self._queue_aux_write(aux_num, desired)
 
     def _reconcile_pending_status(self, status: dict[str, Any]) -> dict[str, Any]:
         """Preserve optimistic values during a bounded confirmation window."""
@@ -244,7 +275,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
                 continue
             reported = reconciled_status[key]
-            if reported == confirmation.expected:
+            if self._values_match(key, reported, confirmation.expected):
                 continue
 
             stale_count = confirmation.stale_reconcile_count + 1
@@ -270,6 +301,25 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._schedule_reconcile()
         return reconciled_status
 
+    @staticmethod
+    def _values_match(key: str, reported: Any, expected: Any) -> bool:
+        """Compare status values in their canonical protocol representation."""
+        if key in {"desired_pool_temp_f", "desired_spa_temp_f"}:
+            try:
+                return CompoolStatusDataUpdateCoordinator._encode_temperature_f(
+                    float(reported)
+                ) == CompoolStatusDataUpdateCoordinator._encode_temperature_f(
+                    float(expected)
+                )
+            except (TypeError, ValueError):
+                return False
+        return reported == expected
+
+    @staticmethod
+    def _encode_temperature_f(temperature: float) -> int:
+        """Encode Fahrenheit using the controller's quarter-degree Celsius unit."""
+        return round((temperature - 32) * 5 / 9 * 4)
+
     def is_pending_confirmation(self, key: str) -> bool:
         """Return whether a status key is waiting for controller confirmation."""
         return key in self._pending_confirmation
@@ -284,7 +334,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _set_pool_temperature(self, temperature: float, unit: str) -> bool:
         """Set pool temperature using pycompool."""
         try:
-            controller = PoolController(self._device, 9600)
+            controller = self._new_controller()
             temp_str = self._format_temperature_string(temperature, unit)
             return controller.set_pool_temperature(temp_str)
         except Exception as ex:
@@ -294,20 +344,27 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _set_spa_temperature(self, temperature: float, unit: str) -> bool:
         """Set spa temperature using pycompool."""
         try:
-            controller = PoolController(self._device, 9600)
+            controller = self._new_controller()
             temp_str = self._format_temperature_string(temperature, unit)
             return controller.set_spa_temperature(temp_str)
         except Exception as ex:
             _LOGGER.error("Error setting spa temperature: %s", ex)
             return False
 
-    def _set_heater_mode(self, mode: str, target: str) -> bool:
-        """Set heater mode using pycompool."""
+    def _set_heater_modes(self, pool_mode: str, spa_mode: str) -> bool:
+        """Write pool and spa modes together as their shared protocol field."""
         try:
-            controller = PoolController(self._device, 9600)
-            return controller.set_heater_mode(mode, target)
+            pool_bits = HEATER_MODES.index(pool_mode)
+            spa_bits = HEATER_MODES.index(spa_mode)
+            heat_source = (
+                (self._heat_source_byte & 0x0F) | (pool_bits << 4) | (spa_bits << 6)
+            )
+            controller = self._new_controller()
+            return controller.connection.send_packet(
+                create_command_packet(heat_source=heat_source, enable_bits=1 << 4)
+            )
         except Exception as ex:
-            _LOGGER.error("Error setting heater mode: %s", ex)
+            _LOGGER.error("Error setting heater modes: %s", ex)
             return False
 
     def _apply_optimistic(self, updates: dict[str, Any]) -> None:
@@ -321,18 +378,21 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.data is None:
             return
         for key, value in updates.items():
+            self._generation += 1
             self._pending_confirmation[key] = PendingConfirmation(
-                expected=value, requested_at=time.monotonic()
+                expected=value,
+                requested_at=time.monotonic(),
+                generation=self._generation,
             )
         self.data.update(updates)
         self.async_set_updated_data(self.data)
 
-    def _mark_write_completed(self, confirmation_keys: tuple[str, ...]) -> None:
+    def _mark_write_completed(self, confirmation_generations: dict[str, int]) -> None:
         """Start confirmation windows when a write reaches the controller."""
         confirmed_at = time.monotonic()
-        for key in confirmation_keys:
+        for key, generation in confirmation_generations.items():
             confirmation = self._pending_confirmation.get(key)
-            if confirmation is None:
+            if confirmation is None or confirmation.generation != generation:
                 continue
             confirmation.requested_at = confirmed_at
             confirmation.stale_reconcile_count = 0
@@ -352,7 +412,13 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         whole batch is sent to the controller at once.
         """
         self._apply_optimistic(optimistic)
-        self._pending_writes[field] = PendingWrite(send, tuple(optimistic))
+        generations = {
+            key: self._pending_confirmation[key].generation for key in optimistic
+        }
+        existing = self._pending_writes.get(field)
+        if existing is not None:
+            generations = {**existing.confirmation_generations, **generations}
+        self._pending_writes[field] = PendingWrite(send, generations)
         if self._flush_unsub is None:
             self._flush_unsub = async_call_later(
                 self.hass, WRITE_BATCH_INTERVAL_SECONDS, self._flush_batch
@@ -366,16 +432,16 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         delayed reconcile poll is scheduled (see _schedule_reconcile) to replace
         the optimistic state with the real heartbeat once it has caught up.
         """
-        self._flush_unsub = None
-        batch = self._pending_writes
-        self._pending_writes = {}
-        if not batch:
-            return
         async with self._io_lock:
+            self._flush_unsub = None
+            batch = self._pending_writes
+            self._pending_writes = {}
+            if not batch:
+                return
             for field, pending_write in batch.items():
                 success = await self.hass.async_add_executor_job(pending_write.send)
                 if success:
-                    self._mark_write_completed(pending_write.confirmation_keys)
+                    self._mark_write_completed(pending_write.confirmation_generations)
                 if not success:
                     _LOGGER.error("Compool write for %s failed", field)
         self._schedule_reconcile()
@@ -389,7 +455,7 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         the pre-change state and snap the UI back. The latest reconcile wins.
         """
         if self._reconcile_unsub is not None:
-            self._reconcile_unsub()
+            return
         self._reconcile_unsub = async_call_later(
             self.hass, RECONCILE_DELAY_SECONDS, self._reconcile
         )
@@ -409,13 +475,17 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._reconcile_unsub = None
         self._pending_writes.clear()
         self._pending_confirmation.clear()
+        self._aux_desired.clear()
+        self._aux_unresolved.clear()
         await super().async_shutdown()
 
     async def async_set_pool_temperature(
         self, temperature: float, unit: str = "f"
     ) -> None:
         """Set pool temperature."""
-        temp_f = temperature if unit.lower() == "f" else round(temperature * 9 / 5 + 32)
+        temp_f = (
+            float(int(temperature)) if unit.lower() == "f" else temperature * 9 / 5 + 32
+        )
         self._schedule_write(
             "pool_temp",
             partial(self._set_pool_temperature, temperature, unit),
@@ -426,7 +496,9 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self, temperature: float, unit: str = "f"
     ) -> None:
         """Set spa temperature."""
-        temp_f = temperature if unit.lower() == "f" else round(temperature * 9 / 5 + 32)
+        temp_f = (
+            float(int(temperature)) if unit.lower() == "f" else temperature * 9 / 5 + 32
+        )
         self._schedule_write(
             "spa_temp",
             partial(self._set_spa_temperature, temperature, unit),
@@ -436,9 +508,14 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_heater_mode(self, mode: str, target: str) -> None:
         """Set heater mode."""
         key = KEY_POOL_HEAT_SOURCE if target == "pool" else KEY_SPA_HEAT_SOURCE
+        current_data = self.data or {}
+        current_pool = current_data.get(KEY_POOL_HEAT_SOURCE, HEATER_MODES[0])
+        current_spa = current_data.get(KEY_SPA_HEAT_SOURCE, HEATER_MODES[0])
+        pool_mode = mode if target == "pool" else current_pool
+        spa_mode = mode if target == "spa" else current_spa
         self._schedule_write(
-            f"heat_{target}",
-            partial(self._set_heater_mode, mode, target),
+            "heat_source",
+            partial(self._set_heater_modes, pool_mode, spa_mode),
             {key: mode},
         )
 
@@ -457,21 +534,34 @@ class CompoolStatusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if current == state:
             # Already in the requested state per the last poll; nothing to do.
             return True
+        # Once attempted, the physical outcome is uncertain even if the
+        # transport raises after writing or no valid acknowledgment arrives.
+        self._aux_unresolved[aux_num] = PendingConfirmation(
+            expected=state, requested_at=time.monotonic()
+        )
         try:
-            controller = PoolController(self._device, 9600)
+            controller = self._new_controller()
             success = controller.toggle_aux_equipment(aux_num)
         except Exception as ex:
             _LOGGER.error("Error setting aux%d equipment: %s", aux_num, ex)
             return False
-        if success:
-            # Reflect the toggle so a later change in the same window is correct.
-            self._aux_state[aux_num] = state
         return success
 
-    async def async_set_aux_equipment(self, aux_num: int, state: bool) -> None:
-        """Set auxiliary equipment state."""
+    def _queue_aux_write(self, aux_num: int, state: bool) -> None:
+        """Queue the latest desired auxiliary state when no toggle is in flight."""
         self._schedule_write(
             f"aux{aux_num}",
             partial(self._set_aux_equipment, aux_num, state),
             {f"aux{aux_num}_on": state},
         )
+
+    async def async_set_aux_equipment(self, aux_num: int, state: bool) -> None:
+        """Set auxiliary equipment state."""
+        self._aux_desired[aux_num] = state
+        unresolved = self._aux_unresolved.get(aux_num)
+        if unresolved is not None and unresolved.expected == state:
+            return
+        if unresolved is not None:
+            self._apply_optimistic({f"aux{aux_num}_on": state})
+            return
+        self._queue_aux_write(aux_num, state)

@@ -136,9 +136,9 @@ async def test_set_heater_mode_service(hass: HomeAssistant, bypass_get_data) -> 
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    with patch(
-        "custom_components.compool.coordinator.PoolController.set_heater_mode",
-        return_value=True,
+    coordinator = entry.runtime_data.coordinator
+    with patch.object(
+        coordinator, "_set_heater_modes", return_value=True
     ) as mock_set_mode:
         await hass.services.async_call(
             DOMAIN,
@@ -151,7 +151,7 @@ async def test_set_heater_mode_service(hass: HomeAssistant, bypass_get_data) -> 
         )
 
         await flush_writes(hass)
-        mock_set_mode.assert_called_once_with("solar-priority", "pool")
+        mock_set_mode.assert_called_once_with("solar-priority", "solar-priority")
 
 
 async def test_set_heater_mode_service_spa(
@@ -164,9 +164,9 @@ async def test_set_heater_mode_service_spa(
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    with patch(
-        "custom_components.compool.coordinator.PoolController.set_heater_mode",
-        return_value=True,
+    coordinator = entry.runtime_data.coordinator
+    with patch.object(
+        coordinator, "_set_heater_modes", return_value=True
     ) as mock_set_mode:
         await hass.services.async_call(
             DOMAIN,
@@ -179,4 +179,4 @@ async def test_set_heater_mode_service_spa(
         )
 
         await flush_writes(hass)
-        mock_set_mode.assert_called_once_with("heater", "spa")
+        mock_set_mode.assert_called_once_with("heater", "heater")

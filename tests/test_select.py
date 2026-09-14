@@ -114,9 +114,9 @@ async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> Non
         # Skip test if entity not created (platform loading issue)
         return
 
-    with patch(
-        "custom_components.compool.coordinator.PoolController.set_heater_mode",
-        return_value=True,
+    coordinator = entry.runtime_data.coordinator
+    with patch.object(
+        coordinator, "_set_heater_modes", return_value=True
     ) as mock_set_mode:
         await hass.services.async_call(
             SELECT_DOMAIN,
@@ -129,7 +129,7 @@ async def test_set_pool_heater_mode(hass: HomeAssistant, bypass_get_data) -> Non
         )
         await flush_writes(hass)
 
-        mock_set_mode.assert_called_once_with("solar-priority", "pool")
+        mock_set_mode.assert_called_once_with("solar-priority", "solar-priority")
 
 
 async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None:
@@ -151,9 +151,9 @@ async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None
         # Skip test if entity not created (platform loading issue)
         return
 
-    with patch(
-        "custom_components.compool.coordinator.PoolController.set_heater_mode",
-        return_value=True,
+    coordinator = entry.runtime_data.coordinator
+    with patch.object(
+        coordinator, "_set_heater_modes", return_value=True
     ) as mock_set_mode:
         await hass.services.async_call(
             SELECT_DOMAIN,
@@ -166,4 +166,4 @@ async def test_set_spa_heater_mode(hass: HomeAssistant, bypass_get_data) -> None
         )
         await flush_writes(hass)
 
-        mock_set_mode.assert_called_once_with("heater", "spa")
+        mock_set_mode.assert_called_once_with("heater", "heater")

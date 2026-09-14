@@ -1,7 +1,7 @@
 """Test Compool coordinator helpers."""
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -70,7 +70,7 @@ async def test_optimistic_updates_apply_immediately(hass: HomeAssistant) -> None
     with (
         patch.object(coordinator, "_set_pool_temperature", return_value=True),
         patch.object(coordinator, "_set_spa_temperature", return_value=True),
-        patch.object(coordinator, "_set_heater_mode", return_value=True),
+        patch.object(coordinator, "_set_heater_modes", return_value=True),
         patch.object(coordinator, "_set_aux_equipment", return_value=True),
     ):
         await coordinator.async_set_pool_temperature(85, "f")
@@ -97,6 +97,19 @@ async def test_optimistic_celsius_converts_to_fahrenheit(hass: HomeAssistant) ->
 
     assert coordinator.data["desired_pool_temp_f"] == 86.0  # 30°C -> 86°F
 
+    await coordinator.async_shutdown()
+
+
+async def test_optimistic_temperature_matches_transmitted_value(
+    hass: HomeAssistant,
+) -> None:
+    """Fractional Fahrenheit input reflects pycompool's integer command value."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)
+
+    await coordinator.async_set_pool_temperature(85.9, "f")
+
+    assert coordinator.data["desired_pool_temp_f"] == 85.0
     await coordinator.async_shutdown()
 
 
@@ -148,6 +161,45 @@ async def test_distinct_fields_flush_in_one_batch(hass: HomeAssistant) -> None:
         mock_aux.assert_called_once_with(1, False)
 
     await coordinator.async_shutdown()
+
+
+async def test_heater_modes_share_one_atomic_write(hass: HomeAssistant) -> None:
+    """Pool and spa changes are composed into one protocol-field write."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = coordinator._normalize_heat_sources(dict(MOCK_POOL_STATUS))
+
+    with patch.object(coordinator, "_set_heater_modes", return_value=True) as mock_set:
+        await coordinator.async_set_heater_mode("solar-only", "pool")
+        await coordinator.async_set_heater_mode("heater", "spa")
+        await flush_writes(hass)
+
+    mock_set.assert_called_once_with("solar-only", "heater")
+    await coordinator.async_shutdown()
+
+
+async def test_heater_packet_preserves_delay_bits(hass: HomeAssistant) -> None:
+    """The atomic heater write preserves only the observed delay flags."""
+    coordinator = _make_coordinator(hass)
+    coordinator._heat_source_byte = 0xEA
+    controller = MagicMock()
+    controller.connection.send_packet.return_value = True
+
+    with patch.object(coordinator, "_new_controller", return_value=controller):
+        assert coordinator._set_heater_modes("heater", "solar-priority") is True
+
+    packet = controller.connection.send_packet.call_args.args[0]
+    assert packet[10] == 0x9A
+    assert packet[14] == 1 << 4
+
+
+def test_temperature_confirmation_uses_protocol_precision() -> None:
+    """Representable quarter-degree values confirm integer Fahrenheit requests."""
+    assert CompoolStatusDataUpdateCoordinator._values_match(
+        "desired_pool_temp_f", 85.1, 85.0
+    )
+    assert not CompoolStatusDataUpdateCoordinator._values_match(
+        "desired_pool_temp_f", 86.0, 85.0
+    )
 
 
 async def test_later_change_does_not_reset_batch_timer(hass: HomeAssistant) -> None:
@@ -219,7 +271,8 @@ async def test_aux_off_optimistic_survives_flush(hass: HomeAssistant) -> None:
         mock_ctrl.return_value.toggle_aux_equipment.assert_called_once_with(1)
         # Optimistic off stands and the tracked baseline agrees - no snap-back.
         assert coordinator.data["aux1_on"] is False
-        assert coordinator._aux_state[1] is False
+        assert coordinator._aux_state[1] is True
+        assert coordinator._aux_unresolved[1].expected is False
 
     await coordinator.async_shutdown()
 
@@ -377,8 +430,9 @@ async def test_aux_off_sends_single_toggle(hass: HomeAssistant) -> None:
         assert coordinator._set_aux_equipment(1, False) is True
 
         instance.toggle_aux_equipment.assert_called_once_with(1)
-        # Baseline advances so a follow-up change in the same window is correct.
-        assert coordinator._aux_state[1] is False
+        # Observed state does not advance until a heartbeat confirms the toggle.
+        assert coordinator._aux_state[1] is True
+        assert coordinator._aux_unresolved[1].expected is False
 
 
 async def test_aux_no_change_sends_nothing(hass: HomeAssistant) -> None:
@@ -472,7 +526,7 @@ async def test_write_waits_for_bus_lock(hass: HomeAssistant) -> None:
         await coordinator._io_lock.acquire()
         coordinator._pending_writes["pool_temp"] = PendingWrite(
             lambda: coordinator._set_pool_temperature(85, "f"),
-            ("desired_pool_temp_f",),
+            {"desired_pool_temp_f": 1},
         )
         task = asyncio.ensure_future(coordinator._flush_batch(None))
         await asyncio.sleep(0)  # let the flush reach the lock and block
@@ -484,6 +538,28 @@ async def test_write_waits_for_bus_lock(hass: HomeAssistant) -> None:
         await task
         mock_set.assert_called_once_with(85, "f")
 
+    await coordinator.async_shutdown()
+
+
+async def test_waiting_batch_keeps_latest_value(hass: HomeAssistant) -> None:
+    """Queued values remain replaceable until the worker acquires the bus."""
+    coordinator = _make_coordinator(hass)
+    coordinator.data = dict(MOCK_POOL_STATUS)
+
+    with patch.object(
+        coordinator, "_set_pool_temperature", return_value=True
+    ) as mock_set:
+        await coordinator.async_set_pool_temperature(80, "f")
+        await coordinator._io_lock.acquire()
+        coordinator._flush_unsub()
+        task = asyncio.create_task(coordinator._flush_batch(None))
+        await asyncio.sleep(0)
+
+        await coordinator.async_set_pool_temperature(90, "f")
+        coordinator._io_lock.release()
+        await task
+
+    mock_set.assert_called_once_with(90, "f")
     await coordinator.async_shutdown()
 
 
@@ -504,10 +580,10 @@ async def test_shutdown_cancels_pending_writes(hass: HomeAssistant) -> None:
 
 @pytest.mark.parametrize(("aux_num", "initial"), [(1, True), (2, False)])
 @pytest.mark.parametrize("first_success", [False, True])
-async def test_aux_retry_after_unconfirmed_write(
+async def test_aux_does_not_retry_unconfirmed_toggle(
     hass: HomeAssistant, aux_num: int, initial: bool, first_success: bool
 ) -> None:
-    """An optimistic poll must not suppress a retry of an unconfirmed command."""
+    """An unresolved toggle must not be repeated from a stale heartbeat."""
     coordinator = _make_coordinator(hass)
     key = f"aux{aux_num}_on"
     status = {**MOCK_POOL_STATUS, key: initial}
@@ -525,7 +601,7 @@ async def test_aux_retry_after_unconfirmed_write(
         assert coordinator._aux_state[aux_num] is initial
         await coordinator.async_set_aux_equipment(aux_num, not initial)
         await flush_writes(hass)
-        assert mock_ctrl.return_value.toggle_aux_equipment.call_count == 2
+        assert mock_ctrl.return_value.toggle_aux_equipment.call_count == 1
 
     await coordinator.async_shutdown()
 

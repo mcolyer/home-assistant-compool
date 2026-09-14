@@ -1,13 +1,16 @@
 """Global fixtures for Compool integration tests."""
 
-# Mock pycompool module at the module level
 import sys
 from unittest.mock import MagicMock, patch
 
+import pycompool.connection  # noqa: F401
+import pycompool.protocol  # noqa: F401
 import pytest
 
 from .const import MOCK_POOL_STATUS
 
+# Keep controller I/O mocked globally while loading real protocol and
+# connection helpers for transport unit tests.
 sys.modules["pycompool"] = MagicMock()
 
 

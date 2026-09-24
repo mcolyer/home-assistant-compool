@@ -579,11 +579,10 @@ async def test_shutdown_cancels_pending_writes(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.parametrize(("aux_num", "initial"), [(1, True), (2, False)])
-@pytest.mark.parametrize("first_success", [False, True])
 async def test_aux_does_not_retry_unconfirmed_toggle(
-    hass: HomeAssistant, aux_num: int, initial: bool, first_success: bool
+    hass: HomeAssistant, aux_num: int, initial: bool
 ) -> None:
-    """An unresolved toggle must not be repeated from a stale heartbeat."""
+    """An acknowledged but unconfirmed toggle is not repeated from a stale poll."""
     coordinator = _make_coordinator(hass)
     key = f"aux{aux_num}_on"
     status = {**MOCK_POOL_STATUS, key: initial}
@@ -592,7 +591,7 @@ async def test_aux_does_not_retry_unconfirmed_toggle(
 
     with patch("custom_components.compool.coordinator.PoolController") as mock_ctrl:
         mock_ctrl.return_value.get_status.return_value = dict(status)
-        mock_ctrl.return_value.toggle_aux_equipment.side_effect = [first_success, True]
+        mock_ctrl.return_value.toggle_aux_equipment.side_effect = [True, True]
         await coordinator.async_set_aux_equipment(aux_num, not initial)
         await flush_writes(hass)
         await flush_reconcile(hass)
@@ -602,6 +601,72 @@ async def test_aux_does_not_retry_unconfirmed_toggle(
         await coordinator.async_set_aux_equipment(aux_num, not initial)
         await flush_writes(hass)
         assert mock_ctrl.return_value.toggle_aux_equipment.call_count == 1
+
+    await coordinator.async_shutdown()
+
+
+def _unacknowledged_toggle_setup(
+    hass: HomeAssistant, aux_num: int, initial: bool
+) -> CompoolStatusDataUpdateCoordinator:
+    """Create a coordinator whose aux circuit is reported in ``initial`` state."""
+    coordinator = _make_coordinator(hass)
+    status = {**MOCK_POOL_STATUS, f"aux{aux_num}_on": initial}
+    coordinator.data = dict(status)
+    coordinator._capture_aux_state(status)
+    return coordinator
+
+
+@pytest.mark.parametrize(("aux_num", "initial"), [(1, True), (2, False)])
+async def test_unacknowledged_toggle_resends_after_reconcile(
+    hass: HomeAssistant, aux_num: int, initial: bool
+) -> None:
+    """An unacknowledged toggle still unapplied at the reconcile poll is re-sent."""
+    coordinator = _unacknowledged_toggle_setup(hass, aux_num, initial)
+
+    with patch("custom_components.compool.coordinator.PoolController") as mock_ctrl:
+        mock_ctrl.return_value.get_status.return_value = dict(coordinator.data)
+        mock_ctrl.return_value.toggle_aux_equipment.side_effect = [False, True]
+        await coordinator.async_set_aux_equipment(aux_num, not initial)
+        await flush_writes(hass)
+        await flush_reconcile(hass)
+        await flush_writes(hass)
+        assert mock_ctrl.return_value.toggle_aux_equipment.call_count == 2
+
+    await coordinator.async_shutdown()
+
+
+async def test_unacknowledged_toggle_not_resent_by_other_polls(
+    hass: HomeAssistant,
+) -> None:
+    """Only the post-write reconcile poll resolves an unacknowledged toggle."""
+    coordinator = _unacknowledged_toggle_setup(hass, 1, True)
+
+    with patch("custom_components.compool.coordinator.PoolController") as mock_ctrl:
+        mock_ctrl.return_value.get_status.return_value = dict(coordinator.data)
+        mock_ctrl.return_value.toggle_aux_equipment.return_value = False
+        await coordinator.async_set_aux_equipment(1, False)
+        await flush_writes(hass)
+        await coordinator.async_refresh()
+        await flush_writes(hass)
+        assert mock_ctrl.return_value.toggle_aux_equipment.call_count == 1
+
+    await coordinator.async_shutdown()
+
+
+async def test_unacknowledged_toggle_fast_resend_happens_once(
+    hass: HomeAssistant,
+) -> None:
+    """A toggle that keeps failing is re-sent early once, not in a tight loop."""
+    coordinator = _unacknowledged_toggle_setup(hass, 1, True)
+
+    with patch("custom_components.compool.coordinator.PoolController") as mock_ctrl:
+        mock_ctrl.return_value.get_status.return_value = dict(coordinator.data)
+        mock_ctrl.return_value.toggle_aux_equipment.return_value = False
+        await coordinator.async_set_aux_equipment(1, False)
+        for _ in range(3):
+            await flush_writes(hass)
+            await flush_reconcile(hass)
+        assert mock_ctrl.return_value.toggle_aux_equipment.call_count == 2
 
     await coordinator.async_shutdown()
 

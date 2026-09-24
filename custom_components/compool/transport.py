@@ -60,13 +60,19 @@ class ReliableSerialConnection(SerialConnection):
 
     @staticmethod
     def _is_valid_ack(packet: bytes) -> bool:
-        """Return whether a packet is a checksummed positive acknowledgment."""
-        if len(packet) != 9 or packet[:7] != ACK_PREFIX + b"\x00\x01\x01\x82":
+        """Return whether a packet is a checksummed positive acknowledgment.
+
+        Layout: sync (2) | dest | version | opcode | length | ack type | checksum (2).
+        The version byte carries the controller's firmware version (0x1b on
+        firmware 27), so it is not checked.
+        """
+        if len(packet) != 9 or packet[:3] != ACK_PREFIX:
             return False
         expected_checksum = calculate_checksum(packet[:-2])
         actual_checksum = int.from_bytes(packet[-2:], "big")
         return (
             packet[4] == ACK_OPCODE
+            and packet[5] == 0x01
             and packet[6] == ACK_TYPE_OK
             and actual_checksum == expected_checksum
         )

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Stop validating the acknowledgment's version byte, which carries the controller firmware version; on firmware other than 0 (such as 27, `0x1b`) every write was logged as failed even though it was applied.
 - Pin the Home Assistant test plugin to the integration's Home Assistant version, refresh the committed lockfile, and require it in local checks to prevent dependency drift from causing false teardown failures.
 
 ## [0.7.0] - 2026-09-14

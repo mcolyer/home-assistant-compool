@@ -40,6 +40,13 @@ OPTIMISTIC_CONFIRMATION_WINDOW_SECONDS = 30
 # even when unrelated serial traffic keeps arriving.
 STATUS_READ_TIMEOUT_SECONDS = 4
 
+# The bus is half duplex and the controller heartbeats every ~2.5s, so commands
+# are sent this soon after a heartbeat to stay clear of the next one.
+HEARTBEAT_QUIET_WINDOW_SECONDS = 1.5
+
+# How long to wait for a heartbeat before sending anyway.
+HEARTBEAT_WAIT_SECONDS = 3.0
+
 _LOGGER = logging.getLogger(__package__)
 
 # Configuration keys
